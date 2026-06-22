@@ -18,3 +18,9 @@ __pycache__/
 
 # Pipeline log
 build_mimic/mimiciv/pipeline_run.log
+
+# Summary generation scripts (local only)
+mimic_analysis/build_part4.py
+mimic_analysis/build_patient_table2.py
+mimic_analysis/compute_part1.py
+mimic_analysis/plot_icu_curves.py
