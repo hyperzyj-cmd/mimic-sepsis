@@ -1,0 +1,20 @@
+# Data files — not tracked
+*.parquet
+*.csv
+*.duckdb
+
+# Intermediate pipeline cache
+build_mimic/mimiciii/intermediate/
+build_mimic/mimiciv/intermediate/
+
+# Output backups
+build_mimic/mimiciii/output/backups/
+build_mimic/mimiciv/output/backups/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Pipeline log
+build_mimic/mimiciv/pipeline_run.log
