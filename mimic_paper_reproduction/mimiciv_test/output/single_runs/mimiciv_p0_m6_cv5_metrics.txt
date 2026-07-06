@@ -1,0 +1,35 @@
+MIMIC-IV grid | +0_-6 | cv5
+cohort_before=6h  cohort_after=0h  horizons=[3, 6]  n_features=1000  split=5-fold CV (80/20 per fold)
+static_cols=0  dynamic_cols=133  include_static_in_root=False  negative_alignment_mode=paper
+====================================================================================
+
+h=3h | stays=15282 | pos=7641 | neg=7641 | visible_rows_per_stay=4 | hourly_rows=61128 | OOF_AUC=0.9672 | OOF_AUPRC=0.9769 | mean_fold_AUC=0.9672 | mean_fold_AUPRC=0.9769 | mean_train_sec=14.0
+  fold=1 | n=3057 | pos=1529 | neg=1528 | AUC=0.9657 | AUPRC=0.9760 | time=13.9s
+  fold=2 | n=3057 | pos=1528 | neg=1529 | AUC=0.9636 | AUPRC=0.9746 | time=14.0s
+  fold=3 | n=3056 | pos=1528 | neg=1528 | AUC=0.9698 | AUPRC=0.9787 | time=14.0s
+  fold=4 | n=3056 | pos=1528 | neg=1528 | AUC=0.9687 | AUPRC=0.9781 | time=14.1s
+  fold=5 | n=3056 | pos=1528 | neg=1528 | AUC=0.9681 | AUPRC=0.9772 | time=13.8s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.90      1.00      0.95      7641
+      Sepsis       1.00      0.89      0.94      7641
+
+    accuracy                           0.95     15282
+   macro avg       0.95      0.95      0.94     15282
+weighted avg       0.95      0.95      0.94     15282
+
+h=6h | stays=15282 | pos=7641 | neg=7641 | visible_rows_per_stay=1 | hourly_rows=15282 | OOF_AUC=0.9574 | OOF_AUPRC=0.9714 | mean_fold_AUC=0.9575 | mean_fold_AUPRC=0.9712 | mean_train_sec=9.8
+  fold=1 | n=3057 | pos=1529 | neg=1528 | AUC=0.9554 | AUPRC=0.9701 | time=10.0s
+  fold=2 | n=3057 | pos=1528 | neg=1529 | AUC=0.9573 | AUPRC=0.9708 | time=9.7s
+  fold=3 | n=3056 | pos=1528 | neg=1528 | AUC=0.9583 | AUPRC=0.9721 | time=10.0s
+  fold=4 | n=3056 | pos=1528 | neg=1528 | AUC=0.9601 | AUPRC=0.9725 | time=9.8s
+  fold=5 | n=3056 | pos=1528 | neg=1528 | AUC=0.9562 | AUPRC=0.9706 | time=9.5s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.90      1.00      0.95      7641
+      Sepsis       1.00      0.89      0.94      7641
+
+    accuracy                           0.94     15282
+   macro avg       0.95      0.94      0.94     15282
+weighted avg       0.95      0.94      0.94     15282
+

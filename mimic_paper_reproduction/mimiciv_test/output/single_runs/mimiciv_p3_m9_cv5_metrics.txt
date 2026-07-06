@@ -1,0 +1,35 @@
+MIMIC-IV grid | +3_-9 | cv5
+cohort_before=9h  cohort_after=3h  horizons=[3, 6]  n_features=1000  split=5-fold CV (80/20 per fold)
+static_cols=0  dynamic_cols=133  include_static_in_root=False  negative_alignment_mode=paper
+====================================================================================
+
+h=3h | stays=11150 | pos=5575 | neg=5575 | visible_rows_per_stay=7 | hourly_rows=78050 | OOF_AUC=0.9784 | OOF_AUPRC=0.9847 | mean_fold_AUC=0.9784 | mean_fold_AUPRC=0.9847 | mean_train_sec=17.1
+  fold=1 | n=2230 | pos=1115 | neg=1115 | AUC=0.9757 | AUPRC=0.9825 | time=17.9s
+  fold=2 | n=2230 | pos=1115 | neg=1115 | AUC=0.9821 | AUPRC=0.9869 | time=17.6s
+  fold=3 | n=2230 | pos=1115 | neg=1115 | AUC=0.9762 | AUPRC=0.9832 | time=17.3s
+  fold=4 | n=2230 | pos=1115 | neg=1115 | AUC=0.9784 | AUPRC=0.9853 | time=17.5s
+  fold=5 | n=2230 | pos=1115 | neg=1115 | AUC=0.9795 | AUPRC=0.9855 | time=15.2s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.92      1.00      0.96      5575
+      Sepsis       1.00      0.92      0.96      5575
+
+    accuracy                           0.96     11150
+   macro avg       0.96      0.96      0.96     11150
+weighted avg       0.96      0.96      0.96     11150
+
+h=6h | stays=11150 | pos=5575 | neg=5575 | visible_rows_per_stay=4 | hourly_rows=44600 | OOF_AUC=0.9738 | OOF_AUPRC=0.9821 | mean_fold_AUC=0.9739 | mean_fold_AUPRC=0.9822 | mean_train_sec=12.1
+  fold=1 | n=2230 | pos=1115 | neg=1115 | AUC=0.9724 | AUPRC=0.9809 | time=12.2s
+  fold=2 | n=2230 | pos=1115 | neg=1115 | AUC=0.9745 | AUPRC=0.9825 | time=12.0s
+  fold=3 | n=2230 | pos=1115 | neg=1115 | AUC=0.9733 | AUPRC=0.9816 | time=12.3s
+  fold=4 | n=2230 | pos=1115 | neg=1115 | AUC=0.9752 | AUPRC=0.9834 | time=12.1s
+  fold=5 | n=2230 | pos=1115 | neg=1115 | AUC=0.9742 | AUPRC=0.9824 | time=12.1s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.92      1.00      0.96      5575
+      Sepsis       1.00      0.92      0.96      5575
+
+    accuracy                           0.96     11150
+   macro avg       0.96      0.96      0.96     11150
+weighted avg       0.96      0.96      0.96     11150
+

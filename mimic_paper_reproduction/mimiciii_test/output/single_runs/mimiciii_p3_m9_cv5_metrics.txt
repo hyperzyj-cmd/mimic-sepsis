@@ -1,0 +1,35 @@
+MIMIC-III grid | +3_-9 | cv5
+cohort_before=9h  cohort_after=3h  horizons=[3, 6]  n_features=1000  split=5-fold CV (80/20 per fold)
+static_cols=0  dynamic_cols=145  include_static_in_root=False  negative_alignment_mode=paper
+====================================================================================
+
+h=3h | stays=8838 | pos=4419 | neg=4419 | visible_rows_per_stay=7 | hourly_rows=61866 | OOF_AUC=0.9870 | OOF_AUPRC=0.9909 | mean_fold_AUC=0.9869 | mean_fold_AUPRC=0.9909 | mean_train_sec=11.3
+  fold=1 | n=1768 | pos=884 | neg=884 | AUC=0.9865 | AUPRC=0.9905 | time=11.3s
+  fold=2 | n=1768 | pos=884 | neg=884 | AUC=0.9871 | AUPRC=0.9911 | time=11.4s
+  fold=3 | n=1768 | pos=884 | neg=884 | AUC=0.9873 | AUPRC=0.9909 | time=11.1s
+  fold=4 | n=1767 | pos=884 | neg=883 | AUC=0.9881 | AUPRC=0.9920 | time=11.0s
+  fold=5 | n=1767 | pos=883 | neg=884 | AUC=0.9857 | AUPRC=0.9901 | time=11.5s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.95      1.00      0.98      4419
+      Sepsis       1.00      0.95      0.98      4419
+
+    accuracy                           0.98      8838
+   macro avg       0.98      0.98      0.98      8838
+weighted avg       0.98      0.98      0.98      8838
+
+h=6h | stays=8838 | pos=4419 | neg=4419 | visible_rows_per_stay=4 | hourly_rows=35352 | OOF_AUC=0.9833 | OOF_AUPRC=0.9889 | mean_fold_AUC=0.9835 | mean_fold_AUPRC=0.9890 | mean_train_sec=9.2
+  fold=1 | n=1768 | pos=884 | neg=884 | AUC=0.9829 | AUPRC=0.9885 | time=9.1s
+  fold=2 | n=1768 | pos=884 | neg=884 | AUC=0.9818 | AUPRC=0.9882 | time=9.2s
+  fold=3 | n=1768 | pos=884 | neg=884 | AUC=0.9852 | AUPRC=0.9899 | time=9.6s
+  fold=4 | n=1767 | pos=884 | neg=883 | AUC=0.9857 | AUPRC=0.9904 | time=8.4s
+  fold=5 | n=1767 | pos=883 | neg=884 | AUC=0.9818 | AUPRC=0.9877 | time=9.4s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.95      1.00      0.98      4419
+      Sepsis       1.00      0.95      0.98      4419
+
+    accuracy                           0.98      8838
+   macro avg       0.98      0.98      0.98      8838
+weighted avg       0.98      0.98      0.98      8838
+

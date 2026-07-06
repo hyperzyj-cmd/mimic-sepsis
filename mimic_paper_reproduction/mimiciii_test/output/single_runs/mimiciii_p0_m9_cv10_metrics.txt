@@ -1,0 +1,45 @@
+MIMIC-III grid | +0_-9 | cv10
+cohort_before=9h  cohort_after=0h  horizons=[3, 6]  n_features=1000  split=10-fold CV
+static_cols=0  dynamic_cols=145  include_static_in_root=False  negative_alignment_mode=paper
+====================================================================================
+
+h=3h | stays=8840 | pos=4420 | neg=4420 | visible_rows_per_stay=7 | hourly_rows=61880 | OOF_AUC=0.9874 | OOF_AUPRC=0.9911 | mean_fold_AUC=0.9874 | mean_fold_AUPRC=0.9911 | mean_train_sec=15.4
+  fold=1 | n=884 | pos=442 | neg=442 | AUC=0.9844 | AUPRC=0.9890 | time=12.5s
+  fold=2 | n=884 | pos=442 | neg=442 | AUC=0.9863 | AUPRC=0.9906 | time=15.8s
+  fold=3 | n=884 | pos=442 | neg=442 | AUC=0.9873 | AUPRC=0.9917 | time=14.6s
+  fold=4 | n=884 | pos=442 | neg=442 | AUC=0.9881 | AUPRC=0.9909 | time=16.1s
+  fold=5 | n=884 | pos=442 | neg=442 | AUC=0.9890 | AUPRC=0.9920 | time=16.0s
+  fold=6 | n=884 | pos=442 | neg=442 | AUC=0.9892 | AUPRC=0.9922 | time=16.1s
+  fold=7 | n=884 | pos=442 | neg=442 | AUC=0.9860 | AUPRC=0.9906 | time=15.8s
+  fold=8 | n=884 | pos=442 | neg=442 | AUC=0.9877 | AUPRC=0.9912 | time=15.1s
+  fold=9 | n=884 | pos=442 | neg=442 | AUC=0.9844 | AUPRC=0.9892 | time=16.1s
+  fold=10 | n=884 | pos=442 | neg=442 | AUC=0.9917 | AUPRC=0.9941 | time=16.0s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.95      1.00      0.98      4420
+      Sepsis       1.00      0.95      0.98      4420
+
+    accuracy                           0.98      8840
+   macro avg       0.98      0.98      0.98      8840
+weighted avg       0.98      0.98      0.98      8840
+
+h=6h | stays=8840 | pos=4420 | neg=4420 | visible_rows_per_stay=4 | hourly_rows=35360 | OOF_AUC=0.9833 | OOF_AUPRC=0.9887 | mean_fold_AUC=0.9834 | mean_fold_AUPRC=0.9888 | mean_train_sec=12.7
+  fold=1 | n=884 | pos=442 | neg=442 | AUC=0.9783 | AUPRC=0.9856 | time=12.9s
+  fold=2 | n=884 | pos=442 | neg=442 | AUC=0.9836 | AUPRC=0.9889 | time=11.7s
+  fold=3 | n=884 | pos=442 | neg=442 | AUC=0.9809 | AUPRC=0.9877 | time=12.6s
+  fold=4 | n=884 | pos=442 | neg=442 | AUC=0.9811 | AUPRC=0.9869 | time=12.8s
+  fold=5 | n=884 | pos=442 | neg=442 | AUC=0.9871 | AUPRC=0.9909 | time=14.2s
+  fold=6 | n=884 | pos=442 | neg=442 | AUC=0.9878 | AUPRC=0.9912 | time=12.1s
+  fold=7 | n=884 | pos=442 | neg=442 | AUC=0.9847 | AUPRC=0.9899 | time=12.0s
+  fold=8 | n=884 | pos=442 | neg=442 | AUC=0.9827 | AUPRC=0.9887 | time=12.6s
+  fold=9 | n=884 | pos=442 | neg=442 | AUC=0.9793 | AUPRC=0.9862 | time=12.8s
+  fold=10 | n=884 | pos=442 | neg=442 | AUC=0.9889 | AUPRC=0.9924 | time=12.9s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.95      1.00      0.98      4420
+      Sepsis       1.00      0.95      0.98      4420
+
+    accuracy                           0.98      8840
+   macro avg       0.98      0.98      0.98      8840
+weighted avg       0.98      0.98      0.98      8840
+

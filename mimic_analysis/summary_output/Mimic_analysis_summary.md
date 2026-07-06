@@ -41,74 +41,89 @@ For `hr < 0`, ICU-sourced variables (vitals, GCS, vasopressors, urine output, ve
 | | MIMIC-III | MIMIC-IV |
 |---|---:|---:|
 | **Scale** | | |
-| Total ICU stays | 52,840 | 94,444 |
-| Unique subjects | 38,484 | 65,355 |
-| Total patient-hours (hr ≥ 0) | 5,274,012 | 8,322,254 |
-| ICU LOS, mean (h) | 98.8 | 87.1 |
-| ICU LOS, median [IQR] (h) | 51.0 [28.0, 100.0] | 47.0 [26.0, 93.0] |
-| LOS < 24 h, % | 16.0% | 19.9% |
-| Hospital mortality, n (%) | 6,516 (12.3%) | 11,343 (12.0%) |
+| Total ICU stays | 52,361 | 94,437 |
+| Unique subjects | 38,343 | 65,365 |
+| Total patient-hours (hr ≥ 0) | 5,133,428 | 8,219,121 |
+| ICU LOS, mean (h) | 97.0 | 86.0 |
+| ICU LOS, median [IQR] (h) | 49.0 [27.0, 98.0] | 46.0 [24.0, 92.0] |
+| LOS < 24 h, % | 19.1% | 23.2% |
+| Hospital mortality, n (%) | 6,407 (12.2%) | 11,347 (12.0%) |
 | **Sepsis** | | |
-| Sepsis stays, n (%) | 19,809 (37.5%) | 40,456 (42.8%) |
-| Non-sepsis stays, n (%) | 33,031 (62.5%) | 53,988 (57.2%) |
-| Sepsis subjects, n (%) | 15,785 (41.0%) | 31,390 (48.0%) |
-| Sepsis onset, median [IQR] (h) | 0 [0, 2] | 2 [1, 6] |
+| Sepsis stays, n (%) | 16,026 (30.6%) | 41,296 (43.7%) |
+| Non-sepsis stays, n (%) | 36,335 (69.4%) | 53,141 (56.3%) |
+| Sepsis subjects, n (%) | 13,161 (34.3%) | 31,911 (48.8%) |
+| Sepsis onset, median [IQR] (h) | 2 [1, 11] | 1 [0, 3] |
 | **SOFA** | | |
-| Max SOFA per stay, mean | 4.6 | 4.7 |
+| Max SOFA per stay, mean | 4.5 | 4.8 |
 | Max SOFA per stay, median [IQR] | 4 [2, 6] | 4 [2, 7] |
-| Max SOFA ≥ 2, % of stays | 81.4% | 80.4% |
-| Max SOFA ≥ 6, % of stays | 32.4% | 33.8% |
-| SOFA at sepsis onset, median [IQR] | 0 [0, 2] | 3 [2, 4] |
-| SOFA Δ at sepsis onset (III only), median [IQR] | 0 [0, 1] | — |
+| Max SOFA ≥ 2, % of stays | 80.6% | 81.9% |
+| Max SOFA ≥ 6, % of stays | 31.2% | 34.6% |
+| SOFA at sepsis onset, median [IQR] | 2 [1, 4] | 3 [2, 4] |
+| SOFA Δ at sepsis onset (III only), median [IQR] | 1 [0, 2] | — |
 
 ### Table 2. First ICU Unit by Volume
 
 | ICU Unit | MIMIC-III | MIMIC-IV |
 |---|---:|---:|
-| MICU | 20,837 (39.4%) | 20,699 (21.9%) |
-| MICU/SICU | — | 15,447 (16.4%) |
-| CVICU | — | 14,769 (15.6%) |
-| CSRU | 9,228 (17.5%) | — |
-| SICU | 8,794 (16.6%) | 13,008 (13.8%) |
-| CCU | 7,639 (14.5%) | 10,771 (11.4%) |
-| TSICU | 6,342 (12.0%) | 10,474 (11.1%) |
-| Neuro Intermediate | — | 5,776 (6.1%) |
-| Neuro SICU | — | 1,750 (1.9%) |
+| Medical Intensive Care Unit (MICU) | — | 20,699 (21.9%) |
+| MICU | 20,644 (39.4%) | — |
+| Medical/Surgical Intensive Care Unit (MICU/SICU) | — | 15,445 (16.4%) |
+| Cardiac Vascular Intensive Care Unit (CVICU) | — | 14,765 (15.6%) |
+| Surgical Intensive Care Unit (SICU) | — | 13,007 (13.8%) |
+| Coronary Care Unit (CCU) | — | 10,773 (11.4%) |
+| Trauma SICU (TSICU) | — | 10,472 (11.1%) |
+| CSRU | 9,154 (17.5%) | — |
+| SICU | 8,724 (16.7%) | — |
+| CCU | 7,572 (14.5%) | — |
+| TSICU | 6,267 (12.0%) | — |
+| Neuro Intermediate | — | 5,775 (6.1%) |
+| Neuro Surgical Intensive Care Unit (Neuro SICU) | — | 1,751 (1.9%) |
 
 ### Table 3. Clinical Data Coverage at hr = 0 (% of stays with ≥ 1 non-null value)
 
 | Variable | MIMIC-III | MIMIC-IV |
 |---|---:|---:|
-| Heart rate | 41.1% | 55.8% |
-| Systolic BP | 39.7% | 52.6% |
-| Temperature | N/A † | 38.7% |
-| SpO₂ | 39.5% | 54.3% |
-| GCS total | 23.0% | 26.8% |
-| Creatinine | 12.6% | 10.4% |
-| Platelet | 14.2% | 11.4% |
-| PaO₂ | 19.6% | 16.0% |
-| Bilirubin (total) | 4.8% | 5.0% |
-| FiO₂ | 4.7% | 3.0% |
+| Heart rate | 98.4% | 88.4% |
+| Systolic BP | 96.9% | 84.3% |
+| Temperature | N/A (not in wide table) | 62.5% |
+| SpO₂ | 96.2% | 86.0% |
+| Creatinine | 18.8% | 20.6% |
+| Platelet | 18.5% | 21.5% |
+| Bilirubin (total) | 6.3% | 6.8% |
+| GCS total | 54.2% | 43.8% |
+| PaO₂ | 18.8% | 16.2% |
+| FiO₂ | 10.4% | 8.6% |
 
 † Temperature is not available as a standalone vital in the MIMIC-III wide table (arterial blood gas temperature only).
 
 ---
 
+
+### Table 4. Sepsis Onset Hour Distribution (Sepsis Stays Only)
+
+Onset hour = first `hr` at which `SepsisLabel = 1` (always ≥ 0; consistent across
+both datasets). Each sepsis stay contributes exactly one value.
+
+| Dataset | Sepsis Stays | Mean (hr) | Median (hr) | P25 (hr) | P75 (hr) | SD | Min (hr) | Max (hr) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MIMIC-III | 16,026 | 19.23 | 2.0 | 1.0 | 11.0 | 50.97 | 0 | 1277 |
+| MIMIC-IV  | 41,296 | 6.63 | 1.0 | 0.0 | 3.0 | 50.2 | 0 | 8769 |
+
 ### Key Observations
 
-#### 1. Sepsis rate: MIMIC-IV (42.8%) > MIMIC-III (37.5%)
+#### 1. Sepsis rate: MIMIC-IV (43.7%) > MIMIC-III (30.6%)
 
 The difference is driven by the **labelling criterion**, not a genuinely higher prevalence of sepsis.
 
-MIMIC-III applies a delta criterion (SOFA rise ≥ 2 from a 24 h rolling minimum), which does not label patients who arrive critically ill and do not deteriorate further. As a result, the median SOFA at sepsis onset is **0 [0, 2]**, indicating that most flagged patients experienced a rise from a low baseline rather than an acute decompensation. MIMIC-IV applies an absolute criterion (SOFA ≥ 2 at time of suspected infection), capturing patients admitted with an already-elevated SOFA; their median onset SOFA is **3 [2, 4]**.
+MIMIC-III applies a delta criterion (SOFA rise ≥ 2 from a 24 h rolling minimum), which does not label patients who arrive critically ill and do not deteriorate further. As a result, the median SOFA at sepsis onset is **2 [1, 4]**, indicating that most flagged patients experienced a rise from a low baseline rather than an acute decompensation. MIMIC-IV applies an absolute criterion (SOFA ≥ 2 at time of suspected infection), capturing patients admitted with an already-elevated SOFA; their median onset SOFA is **3 [2, 4]**.
 
-The clinical severity of the labelled cohorts is nearly identical across datasets (first-day SOFA median 5.0 [3.0, 7.0]; 30-day mortality 20.3% vs 20.6%), confirming that the additional labels in MIMIC-IV represent patients missed by the structural blind spot of the delta criterion — those who arrive critically ill but do not deteriorate further — rather than a milder case mix.
+The clinical severity of the labelled cohorts is nearly identical across datasets (first-day SOFA median 5.0 [3.0, 7.0]; 30-day mortality 20.9% vs 20.3%), confirming that the additional labels in MIMIC-IV represent patients missed by the structural blind spot of the delta criterion — those who arrive critically ill but do not deteriorate further — rather than a milder case mix.
 
 #### 2. Vitals coverage: MIMIC-IV (~55%) > MIMIC-III (~41%) at hr = 0
 
 The gap reflects a documentation system transition: MIMIC-III was recorded primarily through CareVue (manual nursing entry), whereas MIMIC-IV transitioned to MetaVision (automated bedside monitor downloads), which captures vitals at higher frequency and completeness.
 
-#### 3. SOFA means aligned: MIMIC-III (4.6) ≈ MIMIC-IV (4.7)
+#### 3. SOFA means aligned: MIMIC-III (4.5) ≈ MIMIC-IV (4.8)
 
 Prior to correction, the MIMIC-III mean max SOFA was 8.3. The root cause was a structural defect in the renal SOFA urine-output logic, described in detail below.
 
@@ -174,7 +189,7 @@ MAX(
 ) AS uo_24hr
 ```
 
-During the first ~22 hours, `uo_24hr` is forcibly NULL — no UO-driven score is possible. The scoring engine falls back entirely to admission serum creatinine, which is why MIMIC-IV shows a realistic 0.5% severe-failure rate at hr = 0. This logic was ported into the MIMIC-III pipeline (`build_mimic3_wide.py`, step07_uo), after which both datasets align: max SOFA mean 4.6 (III) vs 4.7 (IV).
+During the first ~22 hours, `uo_24hr` is forcibly NULL — no UO-driven score is possible. The scoring engine falls back entirely to admission serum creatinine, which is why MIMIC-IV shows a realistic 0.5% severe-failure rate at hr = 0. This logic was ported into the MIMIC-III pipeline (`build_mimic3_wide.py`, step07_uo), after which both datasets align: max SOFA mean 4.5 (III) vs 4.8 (IV).
 
 ---
 
@@ -190,51 +205,51 @@ During the first ~22 hours, `uo_24hr` is forcibly NULL — no UO-driven score is
 - **30-day mortality:** measured from first ICU admission time
 - **Race/ethnicity:** grouped into 7 categories (White, Black, Hispanic, Asian, Native, Other, Unknown)
 
-### Table 4. MIMIC-III Patient Characteristics
+### Table 5. MIMIC-III Patient Characteristics
 
-| Variable | All patients (N = 38,484) | Survivors (N = 34,070, 88.5%) | Non-survivors (N = 4,414, 11.5%) | *P* (survival) | Sepsis (N = 13,436, 34.9%) | Non-sepsis (N = 25,048, 65.1%) | *P* (sepsis) |
+| Variable | All patients (N = 38,343 (100.0%)) | Survivors (N = 33,979 (88.6%)) | Non-survivors (N = 4,364 (11.4%)) | P-value (Survival) | Sepsis (N = 10,990 (28.7%)) | Non-sepsis (N = 27,353 (71.3%)) | P-value (Sepsis) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Age (y), median [IQR] | 66.0 [52.0, 78.0] | 65.0 [52.0, 77.0] | 74.0 [60.0, 83.0] | <0.001 | 68.0 [55.0, 79.0] | 64.0 [51.0, 77.0] | <0.001 |
-| Male, n (%) | 21,793 (56.6%) | 19,461 (57.1%) | 2,332 (52.8%) | <0.001 | 7,726 (57.5%) | 14,067 (56.2%) | 0.011 |
-| BMI (kg/m²), mean ± SD | 28.4 ± 7.0 | 28.5 ± 7.0 | 27.5 ± 7.1 | <0.001 | 28.8 ± 7.4 | 28.3 ± 6.8 | <0.001 |
-| Race, n (%) | | | | <0.001 | | | <0.001 |
-| &nbsp;&nbsp;White | 27,457 (71.3%) | 24,451 (71.8%) | 3,006 (68.1%) | | 9,783 (72.8%) | 17,674 (70.6%) | |
-| &nbsp;&nbsp;Black | 2,949 (7.7%) | 2,695 (7.9%) | 254 (5.8%) | | 1,081 (8.0%) | 1,868 (7.5%) | |
-| &nbsp;&nbsp;Hispanic | 1,252 (3.3%) | 1,166 (3.4%) | 86 (1.9%) | | 421 (3.1%) | 831 (3.3%) | |
-| &nbsp;&nbsp;Asian | 909 (2.4%) | 806 (2.4%) | 103 (2.3%) | | 350 (2.6%) | 559 (2.2%) | |
-| &nbsp;&nbsp;Native American | 20 (0.1%) | 19 (0.1%) | 1 (0.0%) | | 8 (0.1%) | 12 (0.0%) | |
-| &nbsp;&nbsp;Other | 1,041 (2.7%) | 935 (2.7%) | 106 (2.4%) | | 389 (2.9%) | 652 (2.6%) | |
-| &nbsp;&nbsp;Unknown | 4,856 (12.6%) | 3,998 (11.7%) | 858 (19.4%) | | 1,404 (10.4%) | 3,452 (13.8%) | |
-| Comorbidity index †, median [IQR] | 5.0 [0.0, 12.0] | 5.0 [0.0, 11.0] | 11.0 [5.0, 17.0] | <0.001 | 9.0 [3.0, 15.0] | 4.0 [0.0, 10.0] | <0.001 |
-| SIRS, first-day max, median [IQR] | 3.0 [2.0, 3.0] | 3.0 [2.0, 3.0] | 3.0 [2.0, 4.0] | <0.001 | 3.0 [2.0, 4.0] | 2.0 [2.0, 3.0] | <0.001 |
-| SOFA, first-day, median [IQR] | 3.0 [1.0, 5.0] | 3.0 [1.0, 5.0] | 5.0 [3.0, 9.0] | <0.001 | 5.0 [3.0, 7.0] | 2.0 [1.0, 4.0] | <0.001 |
-| ICU LOS (d), median [IQR] | 2.0 [1.0, 4.0] | 2.0 [1.0, 4.0] | 3.0 [1.0, 7.0] | <0.001 | 3.0 [2.0, 8.0] | 2.0 [1.0, 3.0] | <0.001 |
-| Mechanical ventilation, n (%) | 19,483 (50.6%) | 16,271 (47.8%) | 3,212 (72.8%) | <0.001 | 8,749 (65.1%) | 10,734 (42.9%) | <0.001 |
-| 30-day mortality, n (%) | 5,234 (13.6%) | 1,073 (3.1%) | 4,161 (94.3%) | <0.001 | 2,730 (20.3%) | 2,504 (10.0%) | <0.001 |
-| Hospital mortality, n (%) | 4,414 (11.5%) | 0 (0.0%) | 4,414 (100.0%) | <0.001 | 2,385 (17.8%) | 2,029 (8.1%) | <0.001 |
+| Age (y) [Q1-Q3] | 66.0 [52.0, 78.0] | 65.0 [52.0, 77.0] | 74.0 [61.0, 83.0] | <0.001 | 67.0 [54.0, 79.0] | 65.0 [52.0, 77.0] | <0.001 |
+| Male, n (%) | 21711 (56.6%) | 19413 (57.1%) | 2298 (52.7%) | <0.001 | 6428 (58.5%) | 15283 (55.9%) | <0.001 |
+| BMI (kg/m^2), mean +/- SD | 39.5 +/- 977.2 | 40.6 +/- 1034.0 | 30.7 +/- 110.3 | 0.170 | 48.5 +/- 1390.9 | 35.1 +/- 692.6 | 0.407 |
+| Race, n (%) |  |  |  | <0.001 |  |  | <0.001 |
+|   White | 27370 (71.4%) | 24391 (71.8%) | 2979 (68.3%) |  | 7969 (72.5%) | 19401 (70.9%) |  |
+|   Black | 2937 (7.7%) | 2687 (7.9%) | 250 (5.7%) |  | 873 (7.9%) | 2064 (7.5%) |  |
+|   Hispanic | 1247 (3.3%) | 1162 (3.4%) | 85 (1.9%) |  | 335 (3.0%) | 912 (3.3%) |  |
+|   Asian | 903 (2.4%) | 802 (2.4%) | 101 (2.3%) |  | 271 (2.5%) | 632 (2.3%) |  |
+|   Native | 20 (0.1%) | 19 (0.1%) | 1 (0.0%) |  | 5 (0.0%) | 15 (0.1%) |  |
+|   Other | 1036 (2.7%) | 931 (2.7%) | 105 (2.4%) |  | 329 (3.0%) | 707 (2.6%) |  |
+|   Unknown | 4830 (12.6%) | 3987 (11.7%) | 843 (19.3%) |  | 1208 (11.0%) | 3622 (13.2%) |  |
+| Comorbidity index [Q1-Q3] | 5.0 [0.0, 12.0] | 5.0 [0.0, 11.0] | 11.0 [5.0, 17.0] | <0.001 | 9.0 [4.0, 16.0] | 5.0 [0.0, 10.0] | <0.001 |
+| SIRS first-day max [Q1-Q3] | 3.0 [2.0, 3.0] | 3.0 [2.0, 3.0] | 3.0 [2.0, 4.0] | <0.001 | 3.0 [2.0, 4.0] | 2.0 [2.0, 3.0] | <0.001 |
+| SOFA first-day [Q1-Q3] | 3.0 [1.0, 5.0] | 2.0 [1.0, 4.0] | 5.0 [3.0, 8.0] | <0.001 | 5.0 [3.0, 7.0] | 2.0 [1.0, 4.0] | <0.001 |
+| ICU length-of-stay (d) [Q1-Q3] | 2.0 [1.0, 4.0] | 2.0 [1.0, 4.0] | 3.0 [1.0, 7.0] | <0.001 | 4.0 [2.0, 9.0] | 2.0 [1.0, 3.0] | <0.001 |
+| Mechanical ventilation, n (%) | 19473 (50.8%) | 16263 (47.9%) | 3210 (73.6%) | <0.001 | 7576 (68.9%) | 11897 (43.5%) | <0.001 |
+| 30-day mortality, n (%) | 5204 (13.6%) | 1074 (3.2%) | 4130 (94.6%) | <0.001 | 2293 (20.9%) | 2911 (10.6%) | <0.001 |
+| Hospital mortality, n (%) | 4364 (11.4%) | 0 (0.0%) | 4364 (100.0%) | <0.001 | 2041 (18.6%) | 2323 (8.5%) | <0.001 |
 
-### Table 5. MIMIC-IV Patient Characteristics
+### Table 6. MIMIC-IV Patient Characteristics
 
-| Variable | All patients (N = 65,355) | Survivors (N = 58,275, 89.2%) | Non-survivors (N = 7,080, 10.8%) | *P* (survival) | Sepsis (N = 27,326, 41.8%) | Non-sepsis (N = 38,029, 58.2%) | *P* (sepsis) |
+| Variable | All patients (N = 65,365 (100.0%)) | Survivors (N = 58,279 (89.2%)) | Non-survivors (N = 7,086 (10.8%)) | P-value (Survival) | Sepsis (N = 27,890 (42.7%)) | Non-sepsis (N = 37,475 (57.3%)) | P-value (Sepsis) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Age (y), median [IQR] | 66.0 [54.0, 78.0] | 66.0 [54.0, 77.0] | 73.0 [61.0, 83.0] | <0.001 | 67.0 [56.0, 78.0] | 65.0 [53.0, 77.0] | <0.001 |
-| Male, n (%) | 36,714 (56.2%) | 32,875 (56.4%) | 3,839 (54.2%) | <0.001 | 15,851 (58.0%) | 20,863 (54.9%) | <0.001 |
-| BMI (kg/m²), mean ± SD | 28.8 ± 7.4 | 28.9 ± 7.3 | 28.7 ± 8.3 | 0.125 | 29.1 ± 7.7 | 28.5 ± 7.1 | <0.001 |
-| Race, n (%) | | | | <0.001 | | | <0.001 |
-| &nbsp;&nbsp;White | 43,089 (65.9%) | 38,990 (66.9%) | 4,099 (57.9%) | | 17,890 (65.5%) | 25,199 (66.3%) | |
-| &nbsp;&nbsp;Black | 6,016 (9.2%) | 5,470 (9.4%) | 546 (7.7%) | | 2,303 (8.4%) | 3,713 (9.8%) | |
-| &nbsp;&nbsp;Hispanic | 2,351 (3.6%) | 2,177 (3.7%) | 174 (2.5%) | | 933 (3.4%) | 1,418 (3.7%) | |
-| &nbsp;&nbsp;Asian | 1,980 (3.0%) | 1,769 (3.0%) | 211 (3.0%) | | 800 (2.9%) | 1,180 (3.1%) | |
-| &nbsp;&nbsp;Native American | 127 (0.2%) | 117 (0.2%) | 10 (0.1%) | | 58 (0.2%) | 69 (0.2%) | |
-| &nbsp;&nbsp;Other | 2,416 (3.7%) | 2,183 (3.7%) | 233 (3.3%) | | 987 (3.6%) | 1,429 (3.8%) | |
-| &nbsp;&nbsp;Unknown | 9,376 (14.3%) | 7,569 (13.0%) | 1,807 (25.5%) | | 4,355 (15.9%) | 5,021 (13.2%) | |
-| Comorbidity index ‡, median [IQR] | 4.0 [2.0, 6.0] | 4.0 [2.0, 6.0] | 6.0 [4.0, 8.0] | <0.001 | 5.0 [3.0, 7.0] | 4.0 [2.0, 6.0] | <0.001 |
-| SIRS, first-day max, median [IQR] | 2.0 [1.0, 2.0] | 2.0 [1.0, 2.0] | 2.0 [2.0, 3.0] | <0.001 | 2.0 [1.0, 3.0] | 2.0 [1.0, 2.0] | <0.001 |
-| SOFA, first-day, median [IQR] | 3.0 [1.0, 6.0] | 3.0 [1.0, 5.0] | 6.0 [3.0, 9.0] | <0.001 | 5.0 [3.0, 7.0] | 2.0 [1.0, 4.0] | <0.001 |
-| ICU LOS (d), median [IQR] | 1.9 [1.1, 3.7] | 1.9 [1.1, 3.4] | 2.7 [1.1, 6.4] | <0.001 | 3.0 [1.5, 6.4] | 1.5 [0.9, 2.5] | <0.001 |
-| Mechanical ventilation, n (%) | 28,339 (43.4%) | 23,514 (40.4%) | 4,825 (68.1%) | <0.001 | 17,242 (63.1%) | 11,097 (29.2%) | <0.001 |
-| 30-day mortality, n (%) | 8,964 (13.7%) | 2,208 (3.8%) | 6,756 (95.4%) | <0.001 | 5,620 (20.6%) | 3,344 (8.8%) | <0.001 |
-| Hospital mortality, n (%) | 7,080 (10.8%) | 0 (0.0%) | 7,080 (100.0%) | <0.001 | 4,671 (17.1%) | 2,409 (6.3%) | <0.001 |
+| Age (y) [Q1-Q3] | 66.0 [54.0, 78.0] | 66.0 [54.0, 77.0] | 73.0 [61.0, 83.0] | <0.001 | 67.0 [56.0, 78.0] | 65.0 [53.0, 77.0] | <0.001 |
+| Male, n (%) | 36719 (56.2%) | 32877 (56.4%) | 3842 (54.2%) | <0.001 | 16160 (57.9%) | 20559 (54.9%) | <0.001 |
+| BMI (kg/m^2), mean +/- SD | 29.2 +/- 7.8 | 29.3 +/- 7.7 | 29.1 +/- 7.9 | 0.320 | 29.7 +/- 8.1 | 28.7 +/- 7.4 | <0.001 |
+| Race, n (%) |  |  |  | <0.001 |  |  | <0.001 |
+|   White | 43093 (65.9%) | 38990 (66.9%) | 4103 (57.9%) |  | 18257 (65.5%) | 24836 (66.3%) |  |
+|   Black | 6016 (9.2%) | 5470 (9.4%) | 546 (7.7%) |  | 2366 (8.5%) | 3650 (9.7%) |  |
+|   Hispanic | 2351 (3.6%) | 2177 (3.7%) | 174 (2.5%) |  | 952 (3.4%) | 1399 (3.7%) |  |
+|   Asian | 1981 (3.0%) | 1769 (3.0%) | 212 (3.0%) |  | 817 (2.9%) | 1164 (3.1%) |  |
+|   Native | 127 (0.2%) | 117 (0.2%) | 10 (0.1%) |  | 59 (0.2%) | 68 (0.2%) |  |
+|   Other | 2416 (3.7%) | 2183 (3.7%) | 233 (3.3%) |  | 1012 (3.6%) | 1404 (3.7%) |  |
+|   Unknown | 9381 (14.4%) | 7573 (13.0%) | 1808 (25.5%) |  | 4427 (15.9%) | 4954 (13.2%) |  |
+| Comorbidity index [Q1-Q3] | 4.0 [2.0, 7.0] | 4.0 [2.0, 6.0] | 6.0 [4.0, 8.0] | <0.001 | 5.0 [3.0, 7.0] | 4.0 [2.0, 6.0] | <0.001 |
+| SIRS first-day max [Q1-Q3] | 2.0 [1.0, 2.0] | 2.0 [1.0, 2.0] | 2.0 [2.0, 3.0] | <0.001 | 2.0 [2.0, 3.0] | 2.0 [1.0, 2.0] | <0.001 |
+| SOFA first-day [Q1-Q3] | 3.0 [2.0, 6.0] | 3.0 [1.0, 5.0] | 6.0 [4.0, 10.0] | <0.001 | 5.0 [3.0, 7.0] | 2.0 [1.0, 4.0] | <0.001 |
+| ICU length-of-stay (d) [Q1-Q3] | 1.9 [1.1, 3.7] | 1.9 [1.1, 3.5] | 2.7 [1.1, 6.4] | <0.001 | 2.9 [1.5, 6.3] | 1.5 [0.9, 2.5] | <0.001 |
+| Mechanical ventilation, n (%) | 28444 (43.5%) | 23589 (40.5%) | 4855 (68.5%) | <0.001 | 17521 (62.8%) | 10923 (29.1%) | <0.001 |
+| 30-day mortality, n (%) | 8970 (13.7%) | 2208 (3.8%) | 6762 (95.4%) | <0.001 | 5672 (20.3%) | 3298 (8.8%) | <0.001 |
+| Hospital mortality, n (%) | 7086 (10.8%) | 0 (0.0%) | 7086 (100.0%) | <0.001 | 4710 (16.9%) | 2376 (6.3%) | <0.001 |
 
 ---
 
@@ -244,259 +259,298 @@ During the first ~22 hours, `uo_24hr` is forcibly NULL — no UO-driven score is
 
 ---
 
-## Part 3: Temporal Dynamics across ICU Stay
-
-> All figures use 3-hour time bins (x-axis: 0–336 h). Scripts: `mimic_analysis/plot_icu_curves.py`.
-
----
-
-### Figure 1. Active ICU Stays over Time
-
-Each curve shows the number of stays still ongoing at a given ICU hour — i.e., stays whose length of stay ≥ t. Non-sepsis stays discharge much faster (green flattens near zero by ~72 h), while sepsis stays persist longer and come to dominate the late ICU population. MIMIC-IV has roughly 1.8× more total stays than MIMIC-III at every time point, consistent with its larger overall cohort.
-
-**MIMIC-III**
-![MIMIC-III ICU Retention](../mimiciii/icu_retention.png)
-
-**MIMIC-IV**
-![MIMIC-IV ICU Retention](../mimiciv/icu_retention.png)
-
----
-
-### Figure 2. Sepsis Prevalence among Active Stays
-
-At each hour t, the curve shows the percentage of still-active stays whose sepsis onset has already occurred (i.e., onset_hr ≤ t). The monotone increase reflects two compounding effects: new sepsis diagnoses accumulate over time, and non-sepsis patients discharge earlier, shrinking the denominator. By 336 h, over 80% (MIMIC-III) and 92% (MIMIC-IV) of remaining ICU stays have been labelled sepsis — a clear illustration of length-of-stay bias in long-stay cohorts.
-
-**MIMIC-III**
-![MIMIC-III Sepsis Prevalence](../mimiciii/sepsis_prevalence.png)
-
-**MIMIC-IV**
-![MIMIC-IV Sepsis Prevalence](../mimiciv/sepsis_prevalence.png)
-
----
-
-### Figure 3. Mean SOFA Score over ICU Stay
-
-Mean SOFA is computed at each 3-hour bin across all stays still active at that time, stratified by sepsis status (classified by the full-stay label). In both datasets the mean rises steeply during the first 24 hours as the 24-hour rolling maximum window fills, then plateaus. Sepsis stays maintain a consistently higher SOFA throughout (III: ~5, IV: ~5–6 vs non-sepsis ~3 and ~2.5 respectively), confirming a persistent severity gap between the two cohorts that does not close over the ICU stay.
-
-**MIMIC-III**
-![MIMIC-III SOFA Trajectory](../mimiciii/sofa_trajectory.png)
-
-**MIMIC-IV**
-![MIMIC-IV SOFA Trajectory](../mimiciv/sofa_trajectory.png)
-
----
-
-### Figure 4. In-Hospital Death Timing
-
-The histogram shows when in-hospital deaths occur relative to ICU admission, approximated as the last recorded ICU hour for each death stay. Deaths are concentrated in the first 48–72 hours, with the highest incidence around ICU hours 12–36. The dashed cumulative curve shows that ~50% of all in-hospital deaths occur within the first 48 h (MIMIC-III) or 72 h (MIMIC-IV). The spike at h = 336 is an artefact of clipping: stays longer than 14 days are capped at the plot boundary.
-
-**MIMIC-III**
-![MIMIC-III Death Timing](../mimiciii/death_timing.png)
-
-**MIMIC-IV**
-![MIMIC-IV Death Timing](../mimiciv/death_timing.png)
-
----
-
-### Figure 5. Vasopressor Use Rate over ICU Stay
-
-The y-axis shows, at each 3-hour bin, the percentage of currently active stays receiving any vasopressor (norepinephrine, epinephrine, dopamine, or vasopressin). Both axes are on the same scale to allow direct comparison. In both datasets sepsis stays peak at ~17–18% around hours 6–12, then gradually decline as patients are weaned. Non-sepsis stays show much lower rates throughout (III: ~4–6%, IV: ~1–3%), reflecting the higher haemodynamic instability of septic shock. The late-stay non-sepsis increase is a selection effect: only the most critically ill non-sepsis patients remain in the ICU beyond day 10.
-
-**MIMIC-III**
-![MIMIC-III Vasopressor Rate](../mimiciii/vasopressor_rate.png)
-
-**MIMIC-IV**
-![MIMIC-IV Vasopressor Rate](../mimiciv/vasopressor_rate.png)
-
----
-
 ---
 
 ---
 
 ## Part 4: Subject-Level ICU Stay Patterns
 
-> **Unit of analysis:** one row per unique subject (first vs. subsequent stays). Sepsis label per stay = 1 if `SepsisLabel = 1` at any `hr ≥ 0` within that stay, else 0.
+> **Unit of analysis:** one row per unique subject (first vs. subsequent stays). Sepsis label per stay = 1 if `SepsisLabel = 1` at any `hr >= 0` within that stay, else 0.
 
 ---
 
-### 5.1 Distribution of ICU Stays per Subject
+### 4.1 Distribution of ICU Stays per Subject
 
-MIMIC-III: **38,484** unique subjects — 8,300 (21.6%) have more than one ICU stay.  
-MIMIC-IV: **65,355** unique subjects — 16,241 (24.9%) have more than one ICU stay.
+MIMIC-III: **38,343** unique subjects - 8,140 (21.2%) have more than one ICU stay.  
+MIMIC-IV: **65,365** unique subjects - 16,229 (24.8%) have more than one ICU stay.
 
 *All non-sepsis* = all stays for this subject are labelled 0; *All sepsis* = all stays labelled 1; *Mixed* = at least one 0 and at least one 1 across stays.
 
 **MIMIC-III**
 
-| ICU stays | Subjects, n (%) | ≤ n stays (%) | All non-sepsis | All sepsis | Mixed |
+| ICU stays | Subjects, n (%) | Cumulative (%) | All non-sepsis | All sepsis | Mixed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 30,184 (78.4%) | 78.4% | 19,943 (66.1%) | 10,241 (33.9%) | 0 (0.0%) |
-| 2 | 5,449 (14.2%) | 92.6% | 2,215 (40.6%) | 1,057 (19.4%) | 2,177 (40.0%) |
-| 3 | 1,557 (4.0%) | 96.6% | 404 (25.9%) | 190 (12.2%) | 963 (61.8%) |
-| 4 | 630 (1.6%) | 98.3% | 88 (14.0%) | 64 (10.2%) | 478 (75.9%) |
-| 5 | 290 (0.8%) | 99.0% | 34 (11.7%) | 27 (9.3%) | 229 (79.0%) |
-| 6 | 151 (0.4%) | 99.4% | 6 (4.0%) | 4 (2.6%) | 141 (93.4%) |
-| 7 | 82 (0.2%) | 99.6% | 6 (7.3%) | 3 (3.7%) | 73 (89.0%) |
-| 8 | 40 (0.1%) | 99.7% | 0 (0.0%) | 2 (5.0%) | 38 (95.0%) |
-| 9 | 22 (0.1%) | 99.8% | 1 (4.5%) | 0 (0.0%) | 21 (95.5%) |
+| 1 | 30,203 (78.8%) | 78.8% | 21,880 (72.4%) | 8,323 (27.6%) | 0 (0.0%) |
+| 2 | 5,368 (14.0%) | 92.8% | 2,614 (48.7%) | 706 (13.2%) | 2,048 (38.2%) |
+| 3 | 1,511 (3.9%) | 96.7% | 485 (32.1%) | 120 (7.9%) | 906 (60.0%) |
+| 4 | 623 (1.6%) | 98.3% | 133 (21.3%) | 34 (5.5%) | 456 (73.2%) |
+| 5 | 281 (0.7%) | 99.1% | 44 (15.7%) | 13 (4.6%) | 224 (79.7%) |
+| 6 | 142 (0.4%) | 99.4% | 12 (8.5%) | 1 (0.7%) | 129 (90.8%) |
+| 7 | 76 (0.2%) | 99.6% | 10 (13.2%) | 0 (0.0%) | 66 (86.8%) |
+| 8 | 39 (0.1%) | 99.7% | 0 (0.0%) | 0 (0.0%) | 39 (100.0%) |
+| 9 | 25 (0.1%) | 99.8% | 1 (4.0%) | 0 (0.0%) | 24 (96.0%) |
 | 10 | 23 (0.1%) | 99.9% | 0 (0.0%) | 0 (0.0%) | 23 (100.0%) |
-| ≥11 | 56 (0.1%) | 100.0% | 2 (3.6%) | 0 (0.0%) | 54 (96.4%) |
+| >=11 | 52 (0.1%) | 100.0% | 3 (5.8%) | 0 (0.0%) | 49 (94.2%) |
 
 **MIMIC-IV**
 
-| ICU stays | Subjects, n (%) | ≤ n stays (%) | All non-sepsis | All sepsis | Mixed |
+| ICU stays | Subjects, n (%) | Cumulative (%) | All non-sepsis | All sepsis | Mixed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 49,114 (75.1%) | 75.1% | 29,212 (59.5%) | 19,902 (40.5%) | 0 (0.0%) |
-| 2 | 10,341 (15.8%) | 91.0% | 3,825 (37.0%) | 2,242 (21.7%) | 4,274 (41.3%) |
-| 3 | 3,206 (4.9%) | 95.9% | 670 (20.9%) | 455 (14.2%) | 2,081 (64.9%) |
-| 4 | 1,289 (2.0%) | 97.9% | 169 (13.1%) | 125 (9.7%) | 995 (77.2%) |
-| 5 | 580 (0.9%) | 98.7% | 41 (7.1%) | 40 (6.9%) | 499 (86.0%) |
-| 6 | 308 (0.5%) | 99.2% | 22 (7.1%) | 12 (3.9%) | 274 (89.0%) |
-| 7 | 158 (0.2%) | 99.5% | 5 (3.2%) | 3 (1.9%) | 150 (94.9%) |
-| 8 | 110 (0.2%) | 99.6% | 7 (6.4%) | 3 (2.7%) | 100 (90.9%) |
-| 9 | 55 (0.1%) | 99.7% | 3 (5.5%) | 2 (3.6%) | 50 (90.9%) |
-| 10 | 53 (0.1%) | 99.8% | 2 (3.8%) | 1 (1.9%) | 50 (94.3%) |
-| ≥11 | 141 (0.2%) | 100.0% | 9 (6.4%) | 1 (0.7%) | 131 (92.9%) |
+| 1 | 49,136 (75.2%) | 75.2% | 28,829 (58.7%) | 20,307 (41.3%) | 0 (0.0%) |
+| 2 | 10,331 (15.8%) | 91.0% | 3,722 (36.0%) | 2,351 (22.8%) | 4,258 (41.2%) |
+| 3 | 3,204 (4.9%) | 95.9% | 648 (20.2%) | 480 (15.0%) | 2,076 (64.8%) |
+| 4 | 1,291 (2.0%) | 97.9% | 167 (12.9%) | 131 (10.1%) | 993 (76.9%) |
+| 5 | 578 (0.9%) | 98.7% | 40 (6.9%) | 44 (7.6%) | 494 (85.5%) |
+| 6 | 308 (0.5%) | 99.2% | 22 (7.1%) | 13 (4.2%) | 273 (88.6%) |
+| 7 | 158 (0.2%) | 99.5% | 5 (3.2%) | 5 (3.2%) | 148 (93.7%) |
+| 8 | 110 (0.2%) | 99.6% | 7 (6.4%) | 5 (4.5%) | 98 (89.1%) |
+| 9 | 56 (0.1%) | 99.7% | 3 (5.4%) | 2 (3.6%) | 51 (91.1%) |
+| 10 | 52 (0.1%) | 99.8% | 2 (3.8%) | 1 (1.9%) | 49 (94.2%) |
+| >=11 | 141 (0.2%) | 100.0% | 9 (6.4%) | 1 (0.7%) | 131 (92.9%) |
 
 ---
 
-### 5.2 Sepsis Sequence Patterns
+### 4.2 Sepsis Sequence Patterns
 
-Each subject's ICU stays are ordered by admission time and collapsed to a binary sepsis label per stay (0 = no sepsis, 1 = sepsis), then concatenated into a sequence such as `0->1->0`. Proportion within group = share among all subjects with the same number of ICU stays.
+Each subject's ICU stays are ordered by admission time and collapsed to a binary sepsis label per stay (0 = no sepsis, 1 = sepsis), then concatenated into a sequence such as `0->1->0`. Proportion within group = share among all subjects with the same number of ICU stays. The `1 stay`, `2 stays`, `3 stays`, and `4 stays` sections are mutually exclusive subject subgroups rather than nested subsets.
 
-MIMIC-III: **301** unique sequences in total (30 with ≤4 stays).  
-MIMIC-IV: **514** unique sequences in total (30 with ≤4 stays).
+MIMIC-III: **294** unique sequences in total (30 with <=4 stays).  
+MIMIC-IV: **512** unique sequences in total (30 with <=4 stays).
 
 #### MIMIC-III
 
-#### Sequences with 1–4 ICU Stays (all combinations)
+#### Sequences with 1-4 ICU Stays (all combinations)
 
 | n stays | Sequence | Subjects, n | % within group |
 |---:|---|---:|---:|
-| 1 | `0` | 19,943 | 66.1% |
-| 1 | `1` | 10,241 | 33.9% |
-| 2 | `0->0` | 2,215 | 40.6% |
-| 2 | `0->1` | 1,194 | 21.9% |
-| 2 | `1->1` | 1,057 | 19.4% |
-| 2 | `1->0` | 983 | 18.0% |
-| 3 | `0->0->0` | 404 | 25.9% |
-| 3 | `0->0->1` | 220 | 14.1% |
-| 3 | `1->1->1` | 190 | 12.2% |
-| 3 | `0->1->1` | 170 | 10.9% |
-| 3 | `1->0->1` | 158 | 10.1% |
-| 3 | `1->0->0` | 157 | 10.1% |
-| 3 | `0->1->0` | 148 | 9.5% |
-| 3 | `1->1->0` | 110 | 7.1% |
-| 4 | `0->0->0->0` | 88 | 14.0% |
-| 4 | `1->1->1->1` | 64 | 10.2% |
-| 4 | `0->0->0->1` | 55 | 8.7% |
-| 4 | `0->0->1->1` | 42 | 6.7% |
-| 4 | `1->0->1->1` | 42 | 6.7% |
-| 4 | `0->1->0->0` | 41 | 6.5% |
+| 1 | `0` | 21,880 | 72.4% |
+| 1 | `1` | 8,323 | 27.6% |
+| 2 | `0->0` | 2,614 | 48.7% |
+| 2 | `0->1` | 1,067 | 19.9% |
+| 2 | `1->0` | 981 | 18.3% |
+| 2 | `1->1` | 706 | 13.2% |
+| 3 | `0->0->0` | 485 | 32.1% |
+| 3 | `0->0->1` | 218 | 14.4% |
+| 3 | `1->0->0` | 169 | 11.2% |
+| 3 | `0->1->0` | 159 | 10.5% |
+| 3 | `1->0->1` | 134 | 8.9% |
+| 3 | `0->1->1` | 124 | 8.2% |
+| 3 | `1->1->1` | 120 | 7.9% |
+| 3 | `1->1->0` | 102 | 6.8% |
+| 4 | `0->0->0->0` | 133 | 21.3% |
+| 4 | `0->0->0->1` | 62 | 10.0% |
+| 4 | `0->0->1->0` | 46 | 7.4% |
+| 4 | `1->0->0->0` | 45 | 7.2% |
+| 4 | `0->0->1->1` | 39 | 6.3% |
+| 4 | `0->1->0->0` | 39 | 6.3% |
 | 4 | `1->0->0->1` | 37 | 5.9% |
-| 4 | `1->0->0->0` | 34 | 5.4% |
-| 4 | `0->1->1->1` | 34 | 5.4% |
-| 4 | `0->0->1->0` | 33 | 5.2% |
-| 4 | `0->1->0->1` | 31 | 4.9% |
-| 4 | `1->1->1->0` | 29 | 4.6% |
-| 4 | `0->1->1->0` | 28 | 4.4% |
-| 4 | `1->1->0->1` | 25 | 4.0% |
-| 4 | `1->0->1->0` | 24 | 3.8% |
-| 4 | `1->1->0->0` | 23 | 3.7% |
+| 4 | `1->1->1->1` | 34 | 5.5% |
+| 4 | `0->1->0->1` | 31 | 5.0% |
+| 4 | `1->0->1->1` | 27 | 4.3% |
+| 4 | `1->1->1->0` | 25 | 4.0% |
+| 4 | `0->1->1->0` | 24 | 3.9% |
+| 4 | `1->1->0->1` | 22 | 3.5% |
+| 4 | `0->1->1->1` | 20 | 3.2% |
+| 4 | `1->0->1->0` | 20 | 3.2% |
+| 4 | `1->1->0->0` | 19 | 3.0% |
 
-#### Sequences with ≥5 ICU Stays (summary)
+#### Sequences with >=5 ICU Stays (summary)
 
 | n stays | Subjects | Unique patterns | Most common sequence | Count |
 |---:|---:|---:|---|---:|
-| 5 | 290 | 32 | `0->0->0->0->0` | 34 |
-| 6 | 151 | 52 | `0->0->0->0->0->1` | 8 |
-| 7 | 82 | 51 | `0->0->0->0->0->0->0` | 6 |
-| 8 | 40 | 36 | `0->1->1->0->1->0->0->0` | 2 |
-| 9 | 22 | 22 | `0->1->1->1->1->1->0->0->1` | 1 |
-| 10 | 23 | 22 | `1->0->0->1->1->1->0->1->1->1` | 2 |
-| 11 | 12 | 12 | `1->0->0->0->0->1->1->0->1->0->1` | 1 |
-| 12 | 9 | 9 | `0->0->1->0->1->0->0->0->1->0->0->1` | 1 |
-| 13 | 9 | 9 | `0->0->1->1->0->1->0->0->0->1->1->1->1` | 1 |
-| 14 | 4 | 4 | `1->1->1->1->1->1->1->1->1->0->1->1->1->0` | 1 |
-| 15 | 6 | 6 | `1->1->0->1->1->1->0->0->1->1->1->1->0->1->1` | 1 |
-| 16 | 1 | 1 | `1->1->1->1->0->1->1->1->1->1->0->1->1->0->0->1` | 1 |
-| 17 | 2 | 2 | `0->1->1->1->1->0->0->1->1->1->0->1->1->0->1->1->0` | 1 |
-| 18 | 2 | 2 | `0->1->0->0->0->0->0->1->0->0->0->1->0->1->0->0->0->0` | 1 |
-| 19 | 1 | 1 | `0->1->0->1->0->0->1->0->1->0->0->0->1->1->1->1->1->0->1` | 1 |
-| 21 | 2 | 2 | `0->0->0->0->0->0->0->1->1->0->0->1->0->0->0->0->0->1->0->0->0` | 1 |
-| 22 | 1 | 1 | `0->0->1->0->0->0->1->0->0->0->1->1->1->1->1->1->1->0->1->1->0->1` | 1 |
-| 23 | 1 | 1 | `0->0->0->0->0->1->0->0->0->0->0->1->0->1->0->1->0->0->0->0->0->0->0` | 1 |
-| 25 | 2 | 2 | `1->0->1->0->1->1->0->0->0->1->0->0->1->0->0->0->0->1->0->1->0->0->0->1->1` | 1 |
+| 5 | 281 | 32 | `0->0->0->0->0` | 44 |
+| 6 | 142 | 54 | `0->0->0->0->0->0` | 12 |
+| 7 | 76 | 47 | `0->0->0->0->0->0->0` | 10 |
+| 8 | 39 | 35 | `0->0->0->0->0->0->1->0` | 2 |
+| 9 | 25 | 25 | `0->0->0->0->0->0->0->0->0` | 1 |
+| 10 | 23 | 21 | `0->0->0->0->0->0->0->0->0->1` | 2 |
+| 11 | 8 | 8 | `0->0->0->0->0->0->1->1->0->0->1` | 1 |
+| 12 | 9 | 8 | `0->0->0->0->0->0->0->0->0->0->0->0` | 2 |
+| 13 | 10 | 9 | `0->0->0->0->0->0->0->0->0->1->0->0->1` | 2 |
+| 14 | 5 | 5 | `0->0->0->0->0->0->0->1->0->1->1->0->0->0` | 1 |
+| 15 | 4 | 4 | `0->0->0->0->0->0->0->0->0->0->1->0->1->0->0` | 1 |
+| 16 | 1 | 1 | `1->1->1->1->0->1->1->1->0->1->0->1->1->0->0->1` | 1 |
+| 17 | 2 | 2 | `0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0` | 1 |
+| 18 | 2 | 2 | `0->0->0->0->0->0->0->1->0->0->0->1->0->0->0->0->0->0` | 1 |
+| 19 | 1 | 1 | `0->1->0->1->0->0->1->0->1->0->0->0->1->1->0->1->1->0->1` | 1 |
+| 21 | 2 | 2 | `0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->1->0->0->0` | 1 |
+| 22 | 1 | 1 | `0->0->1->1->0->0->1->0->0->0->1->1->0->0->1->0->1->0->1->1->0->1` | 1 |
+| 23 | 1 | 1 | `0->0->0->0->0->1->0->0->0->0->0->1->0->0->0->1->0->0->0->0->0->0->0` | 1 |
+| 24 | 1 | 1 | `0->0->0->0->0->1->0->0->0->0->0->0->1->0->0->0->0->0->1->0->1->0->1->0` | 1 |
+| 25 | 1 | 1 | `1->0->0->0->1->1->0->0->0->1->0->0->0->0->0->0->0->1->0->0->0->0->0->0->1` | 1 |
 | 30 | 1 | 1 | `0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0` | 1 |
-| 35 | 1 | 1 | `0->0->0->0->0->0->0->0->1->1->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0` | 1 |
-| 38 | 1 | 1 | `0->0->0->0->0->0->1->1->1->0->0->0->1->0->0->1->1->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->1->0->0->0` | 1 |
-| 41 | 1 | 1 | `0->1->1->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->1->0->0->0->1->0->0->0->0->0->0->0->0->1->1->0->0->0->1->0->0->0->0` | 1 |
+| 35 | 1 | 1 | `0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0` | 1 |
+| 38 | 1 | 1 | `0->0->0->0->0->0->0->1->1->0->0->0->1->0->1->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->1->0->0->0` | 1 |
+| 41 | 1 | 1 | `0->0->1->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->1->0->0->0->1->0->0->0->0->0->0->0->0->1->1->0->0->0->1->0->0->0->0` | 1 |
 
 #### MIMIC-IV
 
-#### Sequences with 1–4 ICU Stays (all combinations)
+#### Sequences with 1-4 ICU Stays (all combinations)
 
 | n stays | Sequence | Subjects, n | % within group |
 |---:|---|---:|---:|
-| 1 | `0` | 29,212 | 59.5% |
-| 1 | `1` | 19,902 | 40.5% |
-| 2 | `0->0` | 3,825 | 37.0% |
-| 2 | `1->1` | 2,242 | 21.7% |
-| 2 | `1->0` | 2,231 | 21.6% |
+| 1 | `0` | 28,829 | 58.7% |
+| 1 | `1` | 20,307 | 41.3% |
+| 2 | `0->0` | 3,722 | 36.0% |
+| 2 | `1->1` | 2,351 | 22.8% |
+| 2 | `1->0` | 2,215 | 21.4% |
 | 2 | `0->1` | 2,043 | 19.8% |
-| 3 | `0->0->0` | 670 | 20.9% |
-| 3 | `1->1->1` | 455 | 14.2% |
-| 3 | `1->0->0` | 427 | 13.3% |
-| 3 | `0->0->1` | 365 | 11.4% |
-| 3 | `1->0->1` | 352 | 11.0% |
-| 3 | `1->1->0` | 335 | 10.4% |
-| 3 | `0->1->1` | 306 | 9.5% |
-| 3 | `0->1->0` | 296 | 9.2% |
-| 4 | `0->0->0->0` | 169 | 13.1% |
-| 4 | `1->1->1->1` | 125 | 9.7% |
-| 4 | `0->0->0->1` | 97 | 7.5% |
-| 4 | `1->0->1->1` | 88 | 6.8% |
-| 4 | `1->0->0->0` | 82 | 6.4% |
-| 4 | `0->1->0->0` | 80 | 6.2% |
-| 4 | `1->1->0->1` | 78 | 6.1% |
-| 4 | `1->0->0->1` | 77 | 6.0% |
+| 3 | `0->0->0` | 648 | 20.2% |
+| 3 | `1->1->1` | 480 | 15.0% |
+| 3 | `1->0->0` | 422 | 13.2% |
+| 3 | `0->0->1` | 361 | 11.3% |
+| 3 | `1->0->1` | 353 | 11.0% |
+| 3 | `1->1->0` | 340 | 10.6% |
+| 3 | `0->1->1` | 308 | 9.6% |
+| 3 | `0->1->0` | 292 | 9.1% |
+| 4 | `0->0->0->0` | 167 | 12.9% |
+| 4 | `1->1->1->1` | 131 | 10.1% |
+| 4 | `1->0->1->1` | 93 | 7.2% |
+| 4 | `0->0->0->1` | 90 | 7.0% |
+| 4 | `1->0->0->0` | 81 | 6.3% |
+| 4 | `1->0->0->1` | 81 | 6.3% |
+| 4 | `1->1->0->1` | 79 | 6.1% |
+| 4 | `0->1->0->0` | 75 | 5.8% |
 | 4 | `1->1->0->0` | 72 | 5.6% |
-| 4 | `0->0->1->1` | 71 | 5.5% |
-| 4 | `0->0->1->0` | 68 | 5.3% |
-| 4 | `0->1->1->1` | 66 | 5.1% |
+| 4 | `0->0->1->0` | 67 | 5.2% |
+| 4 | `0->0->1->1` | 67 | 5.2% |
+| 4 | `0->1->1->1` | 67 | 5.2% |
 | 4 | `1->1->1->0` | 64 | 5.0% |
-| 4 | `0->1->0->1` | 55 | 4.3% |
-| 4 | `0->1->1->0` | 49 | 3.8% |
-| 4 | `1->0->1->0` | 48 | 3.7% |
+| 4 | `0->1->0->1` | 57 | 4.4% |
+| 4 | `0->1->1->0` | 53 | 4.1% |
+| 4 | `1->0->1->0` | 47 | 3.6% |
 
-#### Sequences with ≥5 ICU Stays (summary)
+#### Sequences with >=5 ICU Stays (summary)
 
 | n stays | Subjects | Unique patterns | Most common sequence | Count |
 |---:|---:|---:|---|---:|
-| 5 | 580 | 32 | `0->0->0->0->0` | 41 |
-| 6 | 308 | 61 | `0->0->0->0->0->0` | 22 |
-| 7 | 158 | 81 | `1->0->1->1->1->1->1` | 5 |
-| 8 | 110 | 75 | `0->0->0->0->0->0->0->0` | 7 |
-| 9 | 55 | 47 | `1->1->1->0->0->1->1->1->1` | 3 |
-| 10 | 53 | 51 | `0->0->0->0->0->0->0->0->0->0` | 2 |
+| 5 | 578 | 32 | `1->1->1->1->1` | 44 |
+| 6 | 308 | 62 | `0->0->0->0->0->0` | 22 |
+| 7 | 158 | 78 | `0->0->0->0->0->0->0` | 5 |
+| 8 | 110 | 73 | `0->0->0->0->0->0->0->0` | 7 |
+| 9 | 56 | 49 | `0->0->0->0->0->0->0->0->0` | 3 |
+| 10 | 52 | 51 | `0->0->0->0->0->0->0->0->0->0` | 2 |
 | 11 | 43 | 40 | `0->0->0->0->0->0->0->0->0->0->0` | 4 |
-| 12 | 20 | 20 | `1->1->0->0->0->0->0->1->1->1->1->0` | 1 |
-| 13 | 17 | 17 | `1->1->0->1->0->1->0->1->1->1->1->1->0` | 1 |
-| 14 | 6 | 6 | `1->1->0->0->0->1->0->0->1->0->0->0->0->0` | 1 |
-| 15 | 10 | 10 | `1->0->0->0->0->1->1->1->1->0->1->0->1->0->1` | 1 |
-| 16 | 9 | 9 | `1->0->1->1->0->1->1->1->1->1->0->1->0->1->1->1` | 1 |
-| 17 | 4 | 4 | `1->0->0->0->0->1->0->1->0->0->1->1->0->0->1->1->1` | 1 |
+| 12 | 20 | 20 | `0->0->0->0->0->0->0->0->0->0->0->0` | 1 |
+| 13 | 17 | 17 | `0->0->0->0->0->0->0->1->0->0->0->0->0` | 1 |
+| 14 | 6 | 6 | `0->0->0->1->0->1->0->0->1->0->0->1->1->0` | 1 |
+| 15 | 10 | 10 | `0->0->0->0->0->0->0->0->0->0->0->0->0->0->0` | 1 |
+| 16 | 9 | 9 | `0->0->1->0->0->0->0->0->0->0->1->1->0->1->1->1` | 1 |
+| 17 | 4 | 4 | `0->0->1->1->1->0->0->0->0->0->1->1->1->0->0->1->1` | 1 |
 | 18 | 11 | 10 | `0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0` | 2 |
 | 19 | 2 | 2 | `0->0->0->0->1->0->0->1->1->1->1->1->1->0->0->0->0->0->1` | 1 |
-| 20 | 3 | 3 | `1->0->0->0->1->0->1->0->0->0->1->1->1->0->1->1->0->1->0->0` | 1 |
-| 22 | 3 | 3 | `1->1->0->1->1->1->1->1->0->1->0->1->1->1->0->1->0->1->1->0->0->1` | 1 |
-| 24 | 3 | 3 | `1->1->1->0->1->0->1->1->1->1->1->0->1->0->0->0->0->0->0->0->1->1->1->1` | 1 |
-| 25 | 3 | 3 | `1->0->1->1->1->1->1->1->1->1->1->1->0->1->1->0->1->1->1->0->0->1->1->1->1` | 1 |
+| 20 | 3 | 3 | `0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0` | 1 |
+| 22 | 3 | 3 | `0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->1` | 1 |
+| 24 | 3 | 3 | `0->0->0->0->0->0->1->1->1->0->0->0->0->0->0->1->0->0->1->0->0->1->0->1` | 1 |
+| 25 | 3 | 3 | `0->0->0->0->1->1->0->0->1->0->0->0->0->0->1->0->0->0->0->0->1->0->0->1->1` | 1 |
 | 26 | 1 | 1 | `0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0` | 1 |
-| 27 | 1 | 1 | `0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->1->1->0->0->1->0->0->1->0->1` | 1 |
+| 27 | 1 | 1 | `0->0->0->0->0->1->0->1->0->0->0->0->0->0->0->0->0->1->1->0->0->1->0->0->1->0->1` | 1 |
 | 30 | 1 | 1 | `0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->1->0->1->1->0->1->1->0->1` | 1 |
-| 31 | 1 | 1 | `1->1->0->0->0->1->0->0->0->1->0->0->0->1->1->1->1->0->0->0->1->0->0->0->0->0->0->0->0->1->0` | 1 |
+| 31 | 1 | 1 | `1->1->0->0->0->1->0->0->0->1->0->0->1->1->1->1->1->0->0->0->1->0->0->0->0->0->0->0->0->1->0` | 1 |
 | 34 | 1 | 1 | `0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0` | 1 |
 | 37 | 1 | 1 | `1->1->0->1->1->0->0->0->0->0->0->0->0->0->0->1->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->0->1->0->0->0` | 1 |
-| 41 | 1 | 1 | `1->0->0->0->1->1->1->1->0->1->1->1->1->1->1->0->1->1->1->1->1->0->1->1->1->0->1->1->1->1->1->1->1->0->1->1->1->1->1->1->1` | 1 |
+| 41 | 1 | 1 | `1->0->0->1->1->1->1->1->0->1->1->1->1->1->1->0->1->1->1->1->1->0->1->1->1->0->1->1->1->1->1->1->1->0->1->1->1->1->1->1->1` | 1 |
+
+#### Visual Summary
+
+The figure below groups subjects by their total number of ICU stays and shows the most common sequence patterns within each subgroup. Colors separate all-non-sepsis, mixed, and all-sepsis trajectories.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III sequence patterns](../mimiciii/sequence_patterns_small_multiples.png) | ![MIMIC-IV sequence patterns](../mimiciv/sequence_patterns_small_multiples.png) |
+
+## Part 5: Graphical Summaries across ICU Stay
+
+> All figures use 3-hour time bins. Source script: `mimic_analysis/plot_icu_curves.py`.
+
+---
+
+### 5.1 Active ICU Stays over Time
+
+Each curve shows the number of stays still ongoing at a given ICU hour. Non-sepsis stays discharge earlier, while sepsis stays persist longer and gradually make up a larger share of the remaining ICU population.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III ICU retention](../mimiciii/icu_retention.png) | ![MIMIC-IV ICU retention](../mimiciv/icu_retention.png) |
+
+---
+
+### 5.2 Sepsis Prevalence among Active Stays
+
+At each hour `t`, the curve shows the percentage of still-active stays whose sepsis onset has already occurred. The monotonic increase reflects both accumulating onsets and earlier discharge among non-sepsis stays.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III sepsis prevalence](../mimiciii/sepsis_prevalence.png) | ![MIMIC-IV sepsis prevalence](../mimiciv/sepsis_prevalence.png) |
+
+---
+
+### 5.3 Mean SOFA Score over ICU Stay
+
+Mean SOFA is computed at each 3-hour bin across all stays still active at that time, stratified by sepsis status. Sepsis stays maintain a consistently higher SOFA trajectory in both datasets.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III SOFA trajectory](../mimiciii/sofa_trajectory.png) | ![MIMIC-IV SOFA trajectory](../mimiciv/sofa_trajectory.png) |
+
+---
+
+### 5.4 In-Hospital Death Timing
+
+The histogram shows when in-hospital deaths occur relative to ICU admission, approximated by the last recorded ICU hour for each death stay. The dashed curve shows cumulative deaths over ICU time.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III death timing](../mimiciii/death_timing.png) | ![MIMIC-IV death timing](../mimiciv/death_timing.png) |
+
+---
+
+### 5.5 Vasopressor Use Rate over ICU Stay
+
+The y-axis shows the percentage of currently active stays receiving any vasopressor at each 3-hour bin. Sepsis stays have consistently higher vasopressor exposure in both cohorts.
+
+| MIMIC-III | MIMIC-IV |
+|---|---|
+| ![MIMIC-III vasopressor rate](../mimiciii/vasopressor_rate.png) | ![MIMIC-IV vasopressor rate](../mimiciv/vasopressor_rate.png) |
+
+---
+
+## Part 6: ICU Stay Exclusion Flow
+
+Starting from the raw PhysioNet source files, the pipeline applies two sequential filters
+before building the hourly wide table. Steps with zero exclusions are omitted.
+
+### MIMIC-III (source: `ICUSTAYS.csv`, version 1.4)
+
+| Item | Remaining stays | Removed | Filter condition |
+| --- | ---: | ---: | --- |
+| All ICU stays in source database | 61,532 | — | Full dataset |
+| Exclude paediatric patients | 53,362 | −8,170 | Age < 18 years at ICU admission (predominantly neonates: 8,071 of 8,170) |
+| Exclude admissions without ICU charting | 52,894 | −468 | `has_chartevents_data = 0` in `ADMISSIONS`; no ICU monitoring record exists |
+| Exclude stays without a heart-rate record | 52,361 | −533 | No entry in `CHARTEVENTS` with itemid 211 (CareVue) or 220045 (MetaVision); time axis cannot be anchored |
+| **Final wide table** | **52,361** | **−9,171 total** | — |
+
+### MIMIC-IV (source: `icu/icustays.csv.gz`, version 3.1)
+
+| Item | Remaining stays | Removed | Filter condition |
+| --- | ---: | ---: | --- |
+| All ICU stays in source database | 94,458 | — | Full dataset (MIMIC-IV is adults-only by dataset design; age < 18 = 0) |
+| Exclude stays without a heart-rate record | 94,437 | −21 | No entry in `chartevents` with itemid 220045; time axis cannot be anchored |
+| **Final wide table** | **94,437** | **−21 total** | — |
+
+### Notes
+
+- The heart-rate anchor (`intime_hr`) defines `hr = 0` for the entire time axis. A stay with no heart-rate record cannot be placed on the hourly grid and is therefore excluded entirely.
+- MIMIC-III uses two heart-rate itemids (211 = CareVue, 220045 = MetaVision); MIMIC-IV is MetaVision-only (220045).
+- MIMIC-III's `has_chartevents_data` flag is a pre-computed column in `ADMISSIONS` that marks admissions with at least one chartevent record. Stays failing this check have no ICU monitoring data at all.
+
+---
+
+### Pending Exclusion Decisions
+
+| # | Item | Question |
+| --- | --- | --- |
+| 1 | Pre-ICU rows (`hr < 0`) | Should all pre-ICU rows be dropped from the wide table entirely, or retained as context features? |
+| 2 | Stays whose sepsis label depends on pre-ICU data | If pre-ICU rows are removed, any stay where the suspicion window (`si_starttime`) begins before ICU admission relies on pre-ICU data to set `SepsisLabel`. Should these stays be excluded, or relabelled using only in-ICU data? |
+| 3 | Stays with incomplete 24 h SOFA window | The SOFA rolling window is truncated for the first ~24 h of any stay. Should stays shorter than 24 h (or whose only sepsis-eligible window falls within the first 24 h) be excluded to avoid boundary artefacts? |
+| 4 | Early-onset stays (onset ≤ 24 h or ≤ 48 h) | Per the last meeting, stays with sepsis onset within 24 h (or 48 h) of ICU admission may warrant exclusion. Decision may depend on patient source (ED vs. ward vs. OR transfer) — needs verification of admission source distribution before finalising the threshold. |

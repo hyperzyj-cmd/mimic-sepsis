@@ -1,0 +1,35 @@
+MIMIC-III grid | +0_-6 | cv5
+cohort_before=6h  cohort_after=0h  horizons=[3, 6]  n_features=1000  split=5-fold CV (80/20 per fold)
+static_cols=0  dynamic_cols=145  include_static_in_root=False  negative_alignment_mode=paper
+====================================================================================
+
+h=3h | stays=10742 | pos=5371 | neg=5371 | visible_rows_per_stay=4 | hourly_rows=42968 | OOF_AUC=0.9789 | OOF_AUPRC=0.9853 | mean_fold_AUC=0.9791 | mean_fold_AUPRC=0.9854 | mean_train_sec=11.6
+  fold=1 | n=2149 | pos=1075 | neg=1074 | AUC=0.9810 | AUPRC=0.9866 | time=11.8s
+  fold=2 | n=2149 | pos=1074 | neg=1075 | AUC=0.9772 | AUPRC=0.9843 | time=11.0s
+  fold=3 | n=2148 | pos=1074 | neg=1074 | AUC=0.9791 | AUPRC=0.9853 | time=11.6s
+  fold=4 | n=2148 | pos=1074 | neg=1074 | AUC=0.9782 | AUPRC=0.9847 | time=12.3s
+  fold=5 | n=2148 | pos=1074 | neg=1074 | AUC=0.9798 | AUPRC=0.9861 | time=11.4s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.94      1.00      0.97      5371
+      Sepsis       1.00      0.93      0.96      5371
+
+    accuracy                           0.97     10742
+   macro avg       0.97      0.97      0.97     10742
+weighted avg       0.97      0.97      0.97     10742
+
+h=6h | stays=10742 | pos=5371 | neg=5371 | visible_rows_per_stay=1 | hourly_rows=10742 | OOF_AUC=0.9753 | OOF_AUPRC=0.9833 | mean_fold_AUC=0.9753 | mean_fold_AUPRC=0.9834 | mean_train_sec=7.9
+  fold=1 | n=2149 | pos=1075 | neg=1074 | AUC=0.9733 | AUPRC=0.9826 | time=8.5s
+  fold=2 | n=2149 | pos=1074 | neg=1075 | AUC=0.9743 | AUPRC=0.9828 | time=8.2s
+  fold=3 | n=2148 | pos=1074 | neg=1074 | AUC=0.9756 | AUPRC=0.9834 | time=7.4s
+  fold=4 | n=2148 | pos=1074 | neg=1074 | AUC=0.9754 | AUPRC=0.9831 | time=8.2s
+  fold=5 | n=2148 | pos=1074 | neg=1074 | AUC=0.9779 | AUPRC=0.9849 | time=7.5s
+              precision    recall  f1-score   support
+
+   No Sepsis       0.94      1.00      0.97      5371
+      Sepsis       1.00      0.93      0.96      5371
+
+    accuracy                           0.97     10742
+   macro avg       0.97      0.97      0.97     10742
+weighted avg       0.97      0.97      0.97     10742
+

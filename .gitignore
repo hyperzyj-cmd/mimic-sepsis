@@ -24,3 +24,7 @@ mimic_analysis/build_part4.py
 mimic_analysis/build_patient_table2.py
 mimic_analysis/compute_part1.py
 mimic_analysis/plot_icu_curves.py
+mimic_analysis/add_part6_exclusion.py
+mimic_analysis/add_table4_onset_dist.py
+mimic_analysis/check_charlson_iv.py
+mimic_analysis/check_elixhauser.py

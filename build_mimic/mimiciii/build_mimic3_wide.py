@@ -60,7 +60,7 @@ def final_output_is_stale() -> bool:
     if not os.path.exists(OUT_PATH):
         return True
 
-    dependencies = [inter("11_joined"), inter("12_sepsislabel"), inter("severity_scores_firstday")]
+    dependencies = [inter("11_joined"), inter("12_sepsislabel"), inter("severity_scores_firstday"), inter("12c_oasis")]
     dep_mtime = max(os.path.getmtime(path) for path in dependencies if os.path.exists(path))
     return dep_mtime > os.path.getmtime(OUT_PATH)
 
@@ -78,7 +78,7 @@ def register_views(con: duckdb.DuckDBPyConnection):
         "DATETIMEEVENTS", "DIAGNOSES_ICD", "DRGCODES", "D_CPT",
         "D_ICD_DIAGNOSES", "D_ICD_PROCEDURES", "D_ITEMS", "D_LABITEMS",
         "ICUSTAYS", "INPUTEVENTS_CV", "INPUTEVENTS_MV", "LABEVENTS",
-        "MICROBIOLOGYEVENTS", "OUTPUTEVENTS", "PATIENTS", "PRESCRIPTIONS",
+        "MICROBIOLOGYEVENTS", "NOTEEVENTS", "OUTPUTEVENTS", "PATIENTS", "PRESCRIPTIONS",
         "PROCEDUREEVENTS_MV", "PROCEDURES_ICD", "SERVICES", "TRANSFERS",
     ]
     for t in tables:
@@ -130,23 +130,114 @@ def step01_cohort(con):
 # ---------------------------------------------------------------------------
 # Step 2: time axis — one row per ICUSTAY_ID per hour (-24 to los_hours-1)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Step 1b: icustay_times
+# Source: concepts/demographics/icustay_times.sql
+# ---------------------------------------------------------------------------
+def step_icustay_times(con):
+    name = "icustay_times"
+    if exists(name):
+        log.info("step_icustay_times cached"); return
+    t0 = time.time()
+    log.info("step_icustay_times: scanning CHARTEVENTS for HR (itemid 211, 220045)...")
+    con.execute(f"CREATE OR REPLACE VIEW cohort AS SELECT * FROM read_parquet('{inter('01_cohort')}')")
+    con.execute(f"""
+        COPY (
+            WITH h AS (
+                -- lag/lead 拿相邻住院的出/入院时间
+                SELECT
+                    subject_id, hadm_id, admittime, dischtime,
+                    LAG(dischtime)  OVER (PARTITION BY subject_id ORDER BY admittime) AS dischtime_lag,
+                    LEAD(admittime) OVER (PARTITION BY subject_id ORDER BY admittime) AS admittime_lead
+                FROM ADMISSIONS
+            ),
+            adm AS (
+                -- fuzzy 边界：相邻住院间隔 < 24h 时取中间点，否则 ±12h
+                SELECT
+                    h.subject_id,
+                    h.hadm_id,
+                    CASE
+                        WHEN h.dischtime_lag IS NOT NULL
+                         AND h.dischtime_lag > h.admittime - INTERVAL '24' HOUR
+                            THEN h.admittime
+                               - CAST(date_diff('second', h.dischtime_lag, h.admittime) / 2 AS INTEGER)
+                               * INTERVAL '1' SECOND
+                        ELSE h.admittime - INTERVAL '12' HOUR
+                    END AS data_start,
+                    CASE
+                        WHEN h.admittime_lead IS NOT NULL
+                         AND h.admittime_lead < h.dischtime + INTERVAL '24' HOUR
+                            THEN h.dischtime
+                               + CAST(date_diff('second', h.dischtime, h.admittime_lead) / 2 AS INTEGER)
+                               * INTERVAL '1' SECOND
+                        ELSE h.dischtime + INTERVAL '12' HOUR
+                    END AS data_end
+                FROM h
+            ),
+            t1 AS (
+                -- 在 fuzzy 边界内找首/末次心率
+                SELECT
+                    ce.icustay_id,
+                    MIN(ce.charttime) AS intime_hr,
+                    MAX(ce.charttime) AS outtime_hr
+                FROM CHARTEVENTS ce
+                INNER JOIN adm
+                    ON  ce.hadm_id    = adm.hadm_id
+                    AND ce.charttime >= adm.data_start
+                    AND ce.charttime <  adm.data_end
+                WHERE ce.itemid IN (211, 220045)
+                  AND ce.icustay_id IS NOT NULL
+                GROUP BY ce.icustay_id
+            )
+            SELECT
+                c.subject_id,
+                c.hadm_id,
+                c.icustay_id,
+                t1.intime_hr,
+                t1.outtime_hr
+            FROM cohort c
+            LEFT JOIN t1 ON c.icustay_id = t1.icustay_id
+        ) TO '{inter(name)}' (FORMAT PARQUET)
+    """)
+    log.info("step_icustay_times done %.1fs", time.time() - t0)
+
+
+# ---------------------------------------------------------------------------
+# Step 2: time axis
+# Source: concepts/demographics/icustay_hours.sql
+# ---------------------------------------------------------------------------
 def step02_time_axis(con):
     name = "02_time_axis"
     if exists(name):
         log.info("step02 cached"); return
     t0 = time.time()
-    con.execute(f"CREATE OR REPLACE VIEW cohort AS SELECT * FROM read_parquet('{inter('01_cohort')}')")
+    con.execute(f"CREATE OR REPLACE VIEW cohort       AS SELECT * FROM read_parquet('{inter('01_cohort')}')")
+    con.execute(f"CREATE OR REPLACE VIEW icu_times    AS SELECT * FROM read_parquet('{inter('icustay_times')}')")
     con.execute(f"""
         COPY (
+            WITH base AS (
+                SELECT
+                    it.subject_id,
+                    it.hadm_id,
+                    it.icustay_id,
+                    -- 官方：ceiling intime_hr 到整点（+59min 再 truncate）
+                    date_trunc('hour', it.intime_hr + INTERVAL '59' MINUTE) AS endtime,
+                    -- 官方：小时数从 -24 到 CEIL((outtime_hr - intime_hr) 小时)
+                    CAST(CEIL(
+                        date_diff('minute', it.intime_hr, it.outtime_hr) / 60.0
+                    ) AS INTEGER) AS max_hr
+                FROM icu_times it
+                WHERE it.intime_hr IS NOT NULL
+                  AND it.outtime_hr IS NOT NULL
+            )
             SELECT
-                c.subject_id,
-                c.hadm_id,
-                c.icustay_id,
-                CAST(h.generate_series AS INTEGER) AS hr,
-                date_trunc('hour', c.intime) + INTERVAL (CAST(h.generate_series AS INTEGER)) HOUR AS charttime_floor
-            FROM cohort c,
-                 generate_series(-12, c.los_hours - 1) AS h
-            WHERE c.los_hours IS NOT NULL AND c.los_hours > 0
+                b.subject_id,
+                b.hadm_id,
+                b.icustay_id,
+                CAST(h.generate_series AS INTEGER)                                        AS hr,
+                b.endtime + CAST(h.generate_series AS INTEGER) * INTERVAL '1' HOUR       AS charttime_floor
+            FROM base b,
+                 generate_series(-24, b.max_hr) AS h
         ) TO '{inter(name)}' (FORMAT PARQUET)
     """)
     log.info("step02 done %.1fs", time.time() - t0)
@@ -193,39 +284,56 @@ def step03_06_10_chartevents(con):
     all_gcs_ids     = gcs_motor_ids + gcs_verbal_ids + gcs_eyes_ids
 
     # Ventilation / oxygen-delivery / significant-event itemids
+    # Source: durations/ventilation_classification.sql (WHERE clause, exact order)
     vent_ids = [
-        720, 223849, 467, 223834, 226732, 640,
-        445, 448, 449, 450, 1340, 1486, 1600, 224687,
-        639, 654, 681, 682, 683, 684, 224685, 224684, 224686,
-        218, 436, 535, 444, 224697, 224695, 224696, 224746, 224747,
-        221, 1, 1211, 1655, 2000, 226873, 224738, 224419, 224750,
-        543, 5865, 5866, 224707, 224709, 224705, 224706,
-        60, 437, 505, 506, 686, 220339, 224700, 3459,
-        501, 502, 503, 224702, 223, 667, 668, 669, 670, 671, 672, 224701,
+        720, 223849,                                              # vent mode
+        223848,                                                   # vent type
+        445, 448, 449, 450, 1340, 1486, 1600, 224687,            # minute volume
+        639, 654, 681, 682, 683, 684, 224685, 224684, 224686,    # tidal volume
+        218, 436, 535, 444, 224697, 224695, 224696, 224746, 224747,  # RespPressure
+        221, 1, 1211, 1655, 2000, 226873, 224738, 224419, 224750, 227187,  # Insp pressure
+        543,                                                      # PlateauPressure
+        5865, 5866, 224707, 224709, 224705, 224706,              # APRV pressure
+        60, 437, 505, 506, 686, 220339, 224700,                  # PEEP
+        3459,                                                     # high pressure relief
+        501, 502, 503, 224702,                                    # PCV
+        223, 667, 668, 669, 670, 671, 672,                       # TCPCV
+        224701,                                                   # PSVlevel
+        640,                                                      # extubated
+        468, 469, 470, 471, 227287,                              # O2 Delivery Device#2/Mode/Flow
+        226732,                                                   # O2 Delivery Device(s)
+        223834,                                                   # O2 Flow
+        467,                                                      # O2 Delivery Device (vent+O2)
     ]
 
-    # Height itemids (mimic-code heightweight.sql)
-    # CareVue inches: 920,1394,4187,3486 | CareVue cm: 3485,4188 | MV inches: 226707
-    # 226730 (MV cm) intentionally excluded per official — duplicate of 226707
-    height_ids = [920, 1394, 4187, 3486, 3485, 4188, 226707]
+    # Height itemids (mimic-code pivoted_height.sql)
+    # CareVue inches: 920,1394,4187,3486 | CareVue cm: 3485,4188
+    # MV inches: 226707 | MV cm: 226730
+    height_ids = [920, 1394, 4187, 3486, 3485, 4188, 226707, 226730]
 
     # Weight itemids (mimic-code weight_durations.sql)
-    # 224639 = MetaVision daily weight (was missing)
-    weight_ids = [762, 763, 3723, 3580, 226512, 3581, 3582, 224639]
+    # 224639 = MetaVision daily weight (was missing); 4183 = birth weight free-text
+    weight_ids = [762, 763, 3723, 3580, 226512, 3581, 3582, 224639, 4183]
 
     # FiO2 from CHARTEVENTS (mimic-code pivoted_bg.sql — chart FiO2)
-    fio2_chart_ids = [3420, 3422, 190, 223835, 727]
+    fio2_chart_ids = [3420, 3422, 190, 223835]
 
-    # CRRT itemids from CHARTEVENTS (官方 crrt_durations.sql)
-    # CareVue: 29,79,142,146,147,173,192,611,612,624,665,5683
-    # MetaVision: 224144-224146,224149-224154,224191,225183,225956,225958,225976,225977,226457,228004-228006
+    # CHARTEVENTS itemids for dialysis detection (Source: pivot/pivoted_rrt.sql)
     crrt_cv_ids = [
-        # CareVue
-        29, 79, 142, 146, 147, 173, 192, 611, 612, 624, 665, 5683,
-        # MetaVision
-        224144, 224145, 224146, 224149, 224150, 224151, 224152, 224153, 224154, 224191,
-        225183, 225956, 225958, 225976, 225977, 226457,
-        228004, 228005, 228006,
+        # CareVue dialysis items
+        146, 147, 148, 149, 150, 151, 152, 582,
+        # CareVue invasive line type items (value='Dialysis Line')
+        229, 235, 241, 247, 253, 259, 265, 271,
+        # MV checkboxes
+        226118, 227357, 225725,
+        # MV numeric
+        226499, 224154, 225810, 225959, 227639, 225183, 227438, 224191,
+        225806, 225807, 228004, 228005, 228006, 224144, 224145, 224149,
+        224150, 224151, 224152, 224153, 224404, 224406, 226457,
+        # MV text
+        224135, 224139, 224146, 225323, 225740, 225776, 225951, 225952,
+        225953, 225954, 225956, 225958, 225961, 225963, 225965, 225976,
+        225977, 227124, 227290, 227638, 227640, 227753,
     ]
 
     code_status_ids = [128, 223758]
@@ -308,10 +416,10 @@ def step03_06_10_chartevents(con):
                     AVG(CASE WHEN itemid IN ({meanbp_ids})   AND valuenum > 0 AND valuenum < 300 THEN valuenum END) AS meanbp,
                     AVG(CASE WHEN itemid IN ({resprate_ids}) AND valuenum > 0 AND valuenum < 70  THEN valuenum END) AS resprate,
                     AVG(CASE WHEN itemid IN ({tempc_ids})    AND valuenum > 10 AND valuenum < 50 THEN valuenum END) AS tempc,
-                    AVG(CASE WHEN itemid IN ({tempf_ids})    AND valuenum > 50 AND valuenum < 120
+                    AVG(CASE WHEN itemid IN ({tempf_ids})    AND valuenum > 70 AND valuenum < 120
                              THEN (valuenum - 32.0) / 1.8 END) AS tempc_fromf,
                     AVG(CASE WHEN itemid IN ({spo2_ids})     AND valuenum > 0 AND valuenum <= 100 THEN valuenum END) AS spo2,
-                    AVG(CASE WHEN itemid IN ({glucose_ids})  AND valuenum > 0 AND valuenum < 10000 THEN valuenum END) AS glucose,
+                    AVG(CASE WHEN itemid IN ({glucose_ids})  AND valuenum > 0                     THEN valuenum END) AS glucose,
                     AVG(CASE WHEN itemid IN ({etco2_ids})    AND valuenum > 0 AND valuenum < 100  THEN valuenum END) AS etco2
                 FROM ce_filtered
                 WHERE itemid IN ({",".join(str(i) for i in all_vital_ids)})
@@ -321,27 +429,93 @@ def step03_06_10_chartevents(con):
         log.info("step03 vitals done")
 
     # --- GCS pivot ---
+    # Source: pivot/pivoted_gcs.sql + firstday/gcs_first_day.sql
     if not exists(g_name):
-        motor_ids  = ",".join(str(i) for i in gcs_motor_ids)
-        verbal_ids = ",".join(str(i) for i in gcs_verbal_ids)
-        eyes_ids   = ",".join(str(i) for i in gcs_eyes_ids)
-        all_g_ids  = ",".join(str(i) for i in all_gcs_ids)
+        all_g_ids = ",".join(str(i) for i in all_gcs_ids)
 
         con.execute(f"""
             COPY (
+                WITH base AS (
+                    SELECT
+                        ce.icustay_id,
+                        ce.charttime,
+                        MAX(CASE WHEN ce.itemid IN (454, 223901) THEN ce.valuenum ELSE NULL END) AS gcsmotor,
+                        MAX(CASE
+                            WHEN ce.itemid = 723    AND ce.value = '1.0 ET/Trach'    THEN 0
+                            WHEN ce.itemid = 223900 AND ce.value = 'No Response-ETT' THEN 0
+                            WHEN ce.itemid IN (723, 223900) THEN ce.valuenum
+                            ELSE NULL
+                        END) AS gcsverbal,
+                        MAX(CASE WHEN ce.itemid IN (184, 220739) THEN ce.valuenum ELSE NULL END) AS gcseyes,
+                        MAX(CASE
+                            WHEN ce.itemid = 723    AND ce.value = '1.0 ET/Trach'    THEN 1
+                            WHEN ce.itemid = 223900 AND ce.value = 'No Response-ETT' THEN 1
+                            ELSE 0
+                        END) AS endotrachflag,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ce.icustay_id ORDER BY ce.charttime ASC
+                        ) AS rn
+                    FROM ce_filtered ce
+                    WHERE ce.itemid IN ({all_g_ids})
+                    GROUP BY ce.icustay_id, ce.charttime
+                ),
+                gcs_stg0 AS (
+                    SELECT
+                        b.icustay_id, b.charttime, b.endotrachflag,
+                        b.gcsmotor,  b.gcsverbal,  b.gcseyes,
+                        b2.gcsmotor  AS gcsmotorprev,
+                        b2.gcsverbal AS gcsverbalprev,
+                        b2.gcseyes   AS gcseyesprev,
+                        CASE
+                            WHEN b.gcsverbal = 0
+                                THEN 15
+                            WHEN b.gcsverbal IS NULL AND b2.gcsverbal = 0
+                                THEN 15
+                            WHEN b2.gcsverbal = 0
+                                THEN COALESCE(b.gcsmotor, 6)
+                                   + COALESCE(b.gcsverbal, 5)
+                                   + COALESCE(b.gcseyes,  4)
+                            ELSE
+                                  COALESCE(b.gcsmotor,  COALESCE(b2.gcsmotor,  6))
+                                + COALESCE(b.gcsverbal, COALESCE(b2.gcsverbal, 5))
+                                + COALESCE(b.gcseyes,   COALESCE(b2.gcseyes,   4))
+                        END AS gcs
+                    FROM base b
+                    LEFT JOIN base b2
+                        ON  b.icustay_id = b2.icustay_id
+                        AND b.rn = b2.rn + 1
+                        AND b2.charttime > b.charttime - INTERVAL '6' HOUR
+                ),
+                gcs_stg1 AS (
+                    SELECT
+                        icustay_id, charttime, gcs, endotrachflag,
+                        COALESCE(gcsmotor,  gcsmotorprev)  AS gcsmotor,
+                        COALESCE(gcsverbal, gcsverbalprev) AS gcsverbal,
+                        COALESCE(gcseyes,   gcseyesprev)   AS gcseyes,
+                        CASE WHEN COALESCE(gcsmotor,  gcsmotorprev)  IS NULL THEN 0 ELSE 1 END
+                      + CASE WHEN COALESCE(gcsverbal, gcsverbalprev) IS NULL THEN 0 ELSE 1 END
+                      + CASE WHEN COALESCE(gcseyes,   gcseyesprev)   IS NULL THEN 0 ELSE 1 END
+                            AS components_measured
+                    FROM gcs_stg0
+                ),
+                gcs_priority AS (
+                    SELECT *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY icustay_id, charttime
+                            ORDER BY components_measured DESC, endotrachflag, gcs, charttime DESC
+                        ) AS rn
+                    FROM gcs_stg1
+                )
                 SELECT
                     icustay_id,
                     date_trunc('hour', charttime) AS charttime_floor,
-                    MIN(CASE WHEN itemid IN ({motor_ids})  AND valuenum BETWEEN 1 AND 6 THEN valuenum END) AS gcs_motor,
-                    MIN(CASE WHEN itemid IN ({verbal_ids}) AND valuenum BETWEEN 1 AND 5 THEN valuenum END) AS gcs_verbal,
-                    MIN(CASE WHEN itemid IN ({eyes_ids})   AND valuenum BETWEEN 1 AND 4 THEN valuenum END) AS gcs_eyes,
-                    MAX(CASE
-                        WHEN itemid IN ({verbal_ids})
-                         AND value IN ('1.0 ET/Trach', 'No Response-ETT')
-                        THEN 1 ELSE 0
-                    END) AS gcs_sedated
-                FROM ce_filtered
-                WHERE itemid IN ({all_g_ids})
+                    MIN(gcs)           AS gcs_total,
+                    MIN(gcsmotor)      AS gcs_motor,
+                    MIN(gcsverbal)     AS gcs_verbal,
+                    MIN(gcseyes)       AS gcs_eyes,
+                    MAX(endotrachflag) AS gcs_sedated
+                FROM gcs_priority
+                WHERE rn = 1
                 GROUP BY icustay_id, date_trunc('hour', charttime)
             ) TO '{inter(g_name)}' (FORMAT PARQUET)
         """)
@@ -449,7 +623,7 @@ def step03_06_10_chartevents(con):
                             ORDER BY charttime
                         ) AS extubatedlag,
                         CASE
-                            WHEN extubated = 1 THEN 0
+                            -- extubation is not a new vent event; the subsequent row is
                             WHEN LAG(extubated, 1) OVER (
                                 PARTITION BY icustay_id, CASE WHEN mechvent = 1 OR extubated = 1 THEN 1 ELSE 0 END
                                 ORDER BY charttime
@@ -546,90 +720,344 @@ def step03_06_10_chartevents(con):
         """)
         log.info("step10 vent done")
 
-    # --- height / weight per ICU stay (closest valid baseline around ICU intime) ---
+    # --- height / weight per ICU stay
+    # Source: concepts/demographics/heightweight.sql + concepts/durations/weight_durations.sql ---
     if not exists(hw_name):
         con.execute(f"CREATE OR REPLACE VIEW cohort AS SELECT * FROM read_parquet('{inter('01_cohort')}')")
-        hw_ids_str  = ",".join(str(i) for i in height_ids + weight_ids)
+        ht_ids_str = ",".join(str(i) for i in height_ids)
         con.execute(f"""
             COPY (
-                WITH hw_raw AS (
+                -- Source: pivot/pivoted_height.sql
+                WITH ht_raw AS (
                     SELECT
                         ce.icustay_id,
-                        ce.itemid,
+                        ce.charttime,
+                        pt.dob,
+                        CASE
+                            WHEN ce.itemid IN (920, 1394, 4187, 3486, 226707)
+                                THEN ce.valuenum * 2.54
+                            WHEN ce.itemid IN (3485, 4188, 226730)
+                                THEN ce.valuenum
+                        END AS height_raw
+                    FROM ce_filtered ce
+                    JOIN ICUSTAYS ie ON ce.icustay_id = ie.icustay_id
+                    JOIN PATIENTS pt ON ie.subject_id = pt.subject_id
+                    WHERE ce.itemid IN ({ht_ids_str})
+                      AND ce.valuenum IS NOT NULL
+                      AND ce.valuenum != 0
+                ),
+                ht_chartevents AS (
+                    SELECT icustay_id, charttime,
+                        CASE
+                            WHEN date_diff('year', dob, charttime) <= 1
+                             AND height_raw < 80
+                                THEN height_raw
+                            WHEN date_diff('year', dob, charttime) > 1
+                             AND height_raw > 120 AND height_raw < 230
+                                THEN height_raw
+                        END AS height_cm
+                    FROM ht_raw
+                ),
+                echo_ht_raw AS (
+                    SELECT
+                        ne.hadm_id,
+                        TRY_CAST(
+                            regexp_extract(ne.text, 'Date/Time: .+? at ([0-9]+:[0-9]{{2}})', 1)
+                            AS VARCHAR
+                        ) AS echo_time_str,
+                        CAST(ne.chartdate AS DATE) AS chartdate,
+                        TRY_CAST(
+                            regexp_extract(ne.text, 'Height: \\(in\\) ([0-9]+\\.?[0-9]*)', 1)
+                            AS DOUBLE
+                        ) AS height_in
+                    FROM NOTEEVENTS ne
+                    WHERE ne.category = 'Echo'
+                      AND ne.hadm_id IS NOT NULL
+                ),
+                echo_ht AS (
+                    SELECT
+                        ie.icustay_id,
+                        CASE
+                            WHEN echo_time_str IS NOT NULL AND echo_time_str != ''
+                                THEN strptime(
+                                    strftime(chartdate, '%Y-%m-%d') || echo_time_str || ':00',
+                                    '%Y-%m-%d%H:%M:%S'
+                                )
+                            ELSE CAST(chartdate AS TIMESTAMP)
+                        END AS charttime,
+                        height_in * 2.54 AS height_cm
+                    FROM echo_ht_raw er
+                    JOIN ICUSTAYS ie ON er.hadm_id = ie.hadm_id
+                    WHERE er.height_in IS NOT NULL AND er.height_in > 0
+                ),
+                ibw_raw AS (
+                    SELECT
+                        ne.hadm_id,
+                        COALESCE(TRY_CAST(ne.charttime AS TIMESTAMP), CAST(ne.chartdate AS TIMESTAMP)) AS charttime,
+                        TRY_CAST(
+                            regexp_extract(ne.text, 'Ideal body weight: ([0-9]+\\.?[0-9]*)', 1)
+                            AS DOUBLE
+                        ) AS ibw
+                    FROM NOTEEVENTS ne
+                    WHERE ne.text LIKE '%Ideal body weight:%'
+                      AND ne.category != 'Echo'
+                      AND ne.hadm_id IS NOT NULL
+                ),
+                ht_from_ibw AS (
+                    SELECT
+                        ie.icustay_id,
+                        ir.charttime,
+                        CASE
+                            WHEN pt.gender = 'F' THEN (ir.ibw - 45.5) / 0.91 + 152.4
+                            ELSE                      (ir.ibw - 50.0) / 0.91 + 152.4
+                        END AS height_cm
+                    FROM ibw_raw ir
+                    JOIN ICUSTAYS ie ON ir.hadm_id = ie.hadm_id
+                    JOIN PATIENTS pt ON ie.subject_id = pt.subject_id
+                    WHERE ir.ibw IS NOT NULL AND ir.ibw != 0
+                ),
+                ht_nutrition AS (
+                    SELECT
+                        ie.icustay_id,
+                        COALESCE(TRY_CAST(ne.charttime AS TIMESTAMP), CAST(ne.chartdate AS TIMESTAMP)) AS charttime,
+                        CASE
+                            WHEN TRY_CAST(regexp_extract(ne.text, '([0-9]+) cm', 1) AS DOUBLE) < 80
+                                THEN TRY_CAST(regexp_extract(ne.text, '([0-9]+) cm', 1) AS DOUBLE) * 2.54
+                            ELSE
+                                TRY_CAST(regexp_extract(ne.text, '([0-9]+) cm', 1) AS DOUBLE)
+                        END AS height_cm
+                    FROM NOTEEVENTS ne
+                    JOIN ICUSTAYS ie ON ne.hadm_id = ie.hadm_id
+                    WHERE ne.category = 'Nutrition'
+                      AND lower(ne.text) LIKE '%height%'
+                      AND ne.hadm_id IS NOT NULL
+                      AND TRY_CAST(regexp_extract(ne.text, '([0-9]+) cm', 1) AS DOUBLE) > 0
+                ),
+                ht_stg AS (
+                    SELECT icustay_id, charttime, height_cm FROM ht_chartevents
+                        WHERE height_cm IS NOT NULL
+                    UNION ALL
+                    SELECT icustay_id, charttime, height_cm FROM echo_ht
+                        WHERE height_cm IS NOT NULL AND height_cm > 0
+                    UNION ALL
+                    SELECT icustay_id, charttime, height_cm FROM ht_from_ibw
+                        WHERE height_cm IS NOT NULL AND height_cm > 0
+                    UNION ALL
+                    SELECT icustay_id, charttime, height_cm FROM ht_nutrition
+                        WHERE height_cm IS NOT NULL AND height_cm > 0
+                ),
+                -- Source: durations/weight_durations.sql
+                wt_neonate AS (
+                    SELECT
+                        ce.icustay_id, ce.charttime,
+                        MAX(CASE WHEN ce.itemid = 3580 THEN ce.valuenum END) AS wt_kg,
+                        MAX(CASE WHEN ce.itemid = 3581 THEN ce.valuenum END) AS wt_lb,
+                        MAX(CASE WHEN ce.itemid = 3582 THEN ce.valuenum END) AS wt_oz
+                    FROM ce_filtered ce
+                    WHERE ce.itemid IN (3580, 3581, 3582)
+                      AND ce.valuenum > 0
+                    GROUP BY ce.icustay_id, ce.charttime
+                ),
+                birth_wt AS (
+                    SELECT
+                        ce.icustay_id, ce.charttime,
+                        MAX(CASE
+                            WHEN ce.itemid = 4183 THEN
+                                CASE
+                                    WHEN regexp_matches(ce.value, '[^0-9.]') THEN NULL
+                                    WHEN TRY_CAST(ce.value AS DOUBLE) > 100
+                                        THEN TRY_CAST(ce.value AS DOUBLE) / 1000
+                                    WHEN TRY_CAST(ce.value AS DOUBLE) < 10
+                                        THEN TRY_CAST(ce.value AS DOUBLE)
+                                    ELSE NULL
+                                END
+                            WHEN ce.itemid = 3723 AND ce.valuenum < 10 THEN ce.valuenum
+                            ELSE NULL
+                        END) AS wt_kg
+                    FROM ce_filtered ce
+                    WHERE ce.itemid IN (3723, 4183)
+                    GROUP BY ce.icustay_id, ce.charttime
+                ),
+                wt_stg AS (
+                    SELECT
+                        ce.icustay_id,
                         ce.charttime,
                         CASE
-                            -- CareVue inches (920,1394,4187,3486) → cm, adult 120-230
-                            WHEN ce.itemid IN (920, 1394, 4187, 3486)
-                             AND ce.valuenum * 2.54 BETWEEN 120 AND 230
-                                THEN ce.valuenum * 2.54
-                            -- CareVue cm (3485,4188), adult 120-230
-                            WHEN ce.itemid IN (3485, 4188)
-                             AND ce.valuenum BETWEEN 120 AND 230
-                                THEN ce.valuenum
-                            -- MetaVision inches (226707) → cm, adult 120-230
-                            -- 226730 excluded per official (duplicate of 226707)
-                            WHEN ce.itemid = 226707
-                             AND ce.valuenum * 2.54 BETWEEN 120 AND 230
-                                THEN ce.valuenum * 2.54
-                            ELSE NULL
-                        END AS height_cm,
-                        CASE
-                            -- kg items: CareVue + MV (added 224639 = MV daily weight)
-                            WHEN ce.itemid IN (762,763,3723,3580,226512,224639)
-                             AND ce.valuenum BETWEEN 20 AND 300
-                                THEN ce.valuenum
-                            -- lbs → kg
-                            WHEN ce.itemid = 3581 AND ce.valuenum BETWEEN 44 AND 660
-                                THEN ce.valuenum * 0.453592
-                            -- oz → kg
-                            WHEN ce.itemid = 3582 AND ce.valuenum BETWEEN 700 AND 10560
-                                THEN ce.valuenum * 0.0283495
-                            ELSE NULL
-                        END AS weight_kg
+                            WHEN ce.itemid IN (762, 226512) THEN 'admit'
+                            ELSE 'daily'
+                        END AS weight_type,
+                        ce.valuenum AS weight
                     FROM ce_filtered ce
-                    JOIN cohort c ON ce.icustay_id = c.icustay_id
-                    WHERE ce.itemid IN ({hw_ids_str})
-                      AND ce.charttime BETWEEN c.intime - INTERVAL '1' DAY
-                                            AND c.intime + INTERVAL '1' DAY
-                ),
-                height_ranked AS (
+                    WHERE ce.itemid IN (762, 226512, 763, 224639)
+                      AND ce.valuenum IS NOT NULL
+                      AND ce.valuenum > 0
+                    UNION ALL
                     SELECT
-                        r.icustay_id,
-                        r.height_cm,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY r.icustay_id
-                            ORDER BY ABS(date_diff('minute', c.intime, r.charttime)), r.charttime
-                        ) AS rn
-                    FROM hw_raw r
-                    JOIN cohort c ON r.icustay_id = c.icustay_id
-                    WHERE r.height_cm IS NOT NULL
+                        icustay_id, charttime,
+                        'daily' AS weight_type,
+                        CASE
+                            WHEN wt_kg IS NOT NULL THEN wt_kg
+                            WHEN wt_lb IS NOT NULL THEN wt_lb * 0.45359237 + wt_oz * 0.0283495231
+                            ELSE NULL
+                        END AS weight
+                    FROM wt_neonate
+                    UNION ALL
+                    SELECT icustay_id, charttime, 'admit' AS weight_type, wt_kg AS weight
+                    FROM birth_wt
+                    WHERE wt_kg IS NOT NULL
                 ),
-                weight_ranked AS (
+                -- 官方 echo_data.sql：从 NOTEEVENTS 解析心超记录中的体重
+                -- 仅用于无任何 CHARTEVENTS 体重记录的患者（官方注释：约补全 2500 人）
+                echo_raw AS (
                     SELECT
-                        r.icustay_id,
-                        r.weight_kg,
+                        ne.hadm_id,
+                        TRY_CAST(
+                            regexp_extract(ne.text, 'Date/Time: .+? at ([0-9]+:[0-9]{{2}})', 1)
+                            AS VARCHAR
+                        ) AS echo_time_str,
+                        CAST(ne.chartdate AS DATE) AS chartdate,
+                        TRY_CAST(
+                            regexp_extract(ne.text, 'Weight \\(lb\\): ([0-9]+)', 1)
+                            AS DOUBLE
+                        ) AS weight_lb
+                    FROM NOTEEVENTS ne
+                    WHERE ne.category = 'Echo'
+                      AND ne.hadm_id IS NOT NULL
+                ),
+                echo AS (
+                    SELECT
+                        ie.icustay_id,
+                        CASE
+                            WHEN echo_time_str IS NOT NULL AND echo_time_str != ''
+                                THEN strptime(
+                                    strftime(chartdate, '%Y-%m-%d') || echo_time_str || ':00',
+                                    '%Y-%m-%d%H:%M:%S'
+                                )
+                            ELSE CAST(chartdate AS TIMESTAMP)
+                        END AS charttime,
+                        'echo' AS weight_type,
+                        weight_lb * 0.453592 AS weight
+                    FROM echo_raw er
+                    JOIN ICUSTAYS ie ON er.hadm_id = ie.hadm_id
+                    WHERE er.weight_lb IS NOT NULL
+                      AND er.weight_lb > 0
+                      -- 官方：只用于无 CHARTEVENTS 体重记录的患者
+                      AND ie.icustay_id NOT IN (
+                          SELECT DISTINCT icustay_id FROM wt_stg
+                      )
+                ),
+                wt_stg0 AS (
+                    SELECT icustay_id, charttime, weight_type, weight FROM wt_stg
+                    UNION ALL
+                    SELECT icustay_id, charttime, weight_type, weight FROM echo
+                ),
+                wt_stg1 AS (
+                    SELECT
+                        icustay_id,
+                        charttime,
+                        weight_type,
+                        weight,
                         ROW_NUMBER() OVER (
-                            PARTITION BY r.icustay_id
-                            ORDER BY
-                                CASE WHEN r.itemid IN (226512, 762, 763, 3723, 3580, 3581, 3582) THEN 0 ELSE 1 END,
-                                ABS(date_diff('minute', c.intime, r.charttime)),
-                                r.charttime
+                            PARTITION BY icustay_id, weight_type
+                            ORDER BY charttime
                         ) AS rn
-                    FROM hw_raw r
-                    JOIN cohort c ON r.icustay_id = c.icustay_id
-                    WHERE r.weight_kg IS NOT NULL
+                    FROM wt_stg0
+                    WHERE weight BETWEEN 20 AND 300
+                ),
+                wt_stg2 AS (
+                    -- 官方：第一条 admit weight 的 starttime 设为 intime - 2h
+                    SELECT
+                        s.icustay_id,
+                        c.intime,
+                        c.outtime,
+                        CASE
+                            WHEN s.weight_type = 'admit' AND s.rn = 1
+                                THEN c.intime - INTERVAL '2' HOUR
+                            ELSE s.charttime
+                        END AS starttime,
+                        s.weight
+                    FROM wt_stg1 s
+                    JOIN ICUSTAYS c ON s.icustay_id = c.icustay_id
+                ),
+                wt_stg3 AS (
+                    -- 官方：endtime = 下一条记录的 starttime，最后一条用 MAX(outtime,starttime)+2h
+                    SELECT
+                        icustay_id,
+                        intime,
+                        outtime,
+                        starttime,
+                        COALESCE(
+                            LEAD(starttime) OVER (PARTITION BY icustay_id ORDER BY starttime),
+                            GREATEST(outtime, starttime) + INTERVAL '2' HOUR
+                        ) AS endtime,
+                        weight
+                    FROM wt_stg2
+                ),
+                wt1 AS (
+                    SELECT
+                        icustay_id,
+                        starttime,
+                        COALESCE(
+                            endtime,
+                            LEAD(starttime) OVER (PARTITION BY icustay_id ORDER BY starttime),
+                            outtime + INTERVAL '2' HOUR
+                        ) AS endtime,
+                        weight
+                    FROM wt_stg3
+                ),
+                wt_fix AS (
+                    -- 官方：若 intime < 第一条 weight 的 starttime，回填该时段
+                    SELECT
+                        c.icustay_id,
+                        c.intime - INTERVAL '2' HOUR AS starttime,
+                        first_wt.starttime           AS endtime,
+                        first_wt.weight
+                    FROM ICUSTAYS c
+                    JOIN (
+                        SELECT
+                            icustay_id,
+                            starttime,
+                            weight,
+                            ROW_NUMBER() OVER (PARTITION BY icustay_id ORDER BY starttime) AS rn
+                        FROM wt1
+                    ) first_wt
+                      ON c.icustay_id = first_wt.icustay_id
+                     AND first_wt.rn  = 1
+                     AND c.intime     < first_wt.starttime
+                ),
+                weight_durations AS (
+                    SELECT icustay_id, starttime, endtime, weight FROM wt1
+                    UNION ALL
+                    SELECT icustay_id, starttime, endtime, weight FROM wt_fix
+                ),
+                -- 官方 heightweight.sql：从 weight_durations 取 first/min/max
+                wt_agg AS (
+                    SELECT
+                        icustay_id,
+                        weight,
+                        ROW_NUMBER() OVER (PARTITION BY icustay_id ORDER BY starttime) AS rn
+                    FROM weight_durations
+                ),
+                ht_ranked AS (
+                    SELECT
+                        icustay_id,
+                        height_cm,
+                        ROW_NUMBER() OVER (PARTITION BY icustay_id ORDER BY charttime) AS rn
+                    FROM ht_stg
+                    WHERE height_cm IS NOT NULL
                 )
                 SELECT
                     c.icustay_id,
-                    ROUND(h.height_cm, 1) AS height_cm,
-                    ROUND(w.weight_kg, 1) AS weight_kg
+                    ROUND(CAST(MIN(CASE WHEN h.rn = 1 THEN h.height_cm END) AS DOUBLE), 2) AS height_first,
+                    ROUND(CAST(MIN(h.height_cm)                             AS DOUBLE), 2) AS height_min,
+                    ROUND(CAST(MAX(h.height_cm)                             AS DOUBLE), 2) AS height_max,
+                    ROUND(CAST(MIN(CASE WHEN w.rn = 1 THEN w.weight    END) AS DOUBLE), 2) AS weight_first,
+                    ROUND(CAST(MIN(w.weight)                                AS DOUBLE), 2) AS weight_min,
+                    ROUND(CAST(MAX(w.weight)                                AS DOUBLE), 2) AS weight_max
                 FROM cohort c
-                LEFT JOIN height_ranked h
-                  ON c.icustay_id = h.icustay_id
-                 AND h.rn = 1
-                LEFT JOIN weight_ranked w
-                  ON c.icustay_id = w.icustay_id
-                 AND w.rn = 1
+                LEFT JOIN ht_ranked h ON c.icustay_id = h.icustay_id
+                LEFT JOIN wt_agg    w ON c.icustay_id = w.icustay_id
+                GROUP BY c.icustay_id
             ) TO '{inter(hw_name)}' (FORMAT PARQUET)
         """)
         log.info("step_hw height/weight done")
@@ -650,9 +1078,7 @@ def step03_06_10_chartevents(con):
                         -- 190: CV FiO2 set (小数格式)
                         WHEN itemid = 190    AND valuenum > 0.20 AND valuenum < 1   THEN valuenum * 100
                         -- 3420, 3422: CV FiO2，值已是百分比，直接用
-                        WHEN itemid IN (3420, 3422) AND valuenum BETWEEN 21 AND 100 THEN valuenum
-                        -- 727: MV FiO2 百分比
-                        WHEN itemid = 727    AND valuenum BETWEEN 21 AND 100        THEN valuenum
+                        WHEN itemid IN (3420, 3422) AND valuenum > 0 AND valuenum < 100 THEN valuenum
                         ELSE NULL
                     END) AS fio2_chartevents
                 FROM ce_filtered
@@ -662,7 +1088,8 @@ def step03_06_10_chartevents(con):
         """)
         log.info("step_fio2_chart done")
 
-    # --- CRRT flag from CHARTEVENTS (MV monitoring items) ---
+    # --- CRRT CHARTEVENTS rows — save itemid+value+valuenum for pivoted_rrt.sql CASE logic ---
+    # Source: pivot/pivoted_rrt.sql (ce CTE)
     if not exists(crrt_name):
         crrt_ids_str = ",".join(str(i) for i in crrt_cv_ids)
         con.execute(f"""
@@ -670,11 +1097,12 @@ def step03_06_10_chartevents(con):
                 SELECT
                     icustay_id,
                     date_trunc('hour', charttime) AS charttime_floor,
-                    1 AS crrt_ce_flag
+                    itemid,
+                    value,
+                    valuenum
                 FROM ce_filtered
                 WHERE itemid IN ({crrt_ids_str})
-                  AND valuenum IS NOT NULL
-                GROUP BY icustay_id, date_trunc('hour', charttime)
+                  AND value IS NOT NULL
             ) TO '{inter(crrt_name)}' (FORMAT PARQUET)
         """)
         log.info("step_crrt_cv done")
@@ -686,7 +1114,7 @@ def step03_06_10_chartevents(con):
                 SELECT
                     icustay_id,
                     date_trunc('hour', charttime) AS charttime_floor,
-                    AVG(CASE WHEN itemid IN ({icp_ids_str}) AND valuenum > 0 AND valuenum < 100 THEN valuenum END) AS icp
+                    MAX(CASE WHEN itemid IN ({icp_ids_str}) AND valuenum > 0 AND valuenum < 100 THEN valuenum END) AS icp
                 FROM ce_filtered
                 WHERE itemid IN ({icp_ids_str})
                 GROUP BY icustay_id, date_trunc('hour', charttime)
@@ -804,6 +1232,7 @@ def step03_06_10_chartevents(con):
                     GROUP BY icustay_id, line_num
                     HAVING MIN(charttime) != MAX(charttime)
                 ),
+                -- Source: concepts/durations/arterial_line_durations.sql
                 art_mv_dur AS (
                     SELECT
                         pe.icustay_id,
@@ -884,6 +1313,7 @@ def step03_06_10_chartevents(con):
                     GROUP BY icustay_id, line_num
                     HAVING MIN(charttime) != MAX(charttime)
                 ),
+                -- Source: concepts/durations/central_line_durations.sql
                 cvl_mv_dur AS (
                     SELECT
                         pe.icustay_id,
@@ -895,7 +1325,7 @@ def step03_06_10_chartevents(con):
                       AND pe.starttime IS NOT NULL
                       AND pe.endtime IS NOT NULL
                       AND (pe.locationcategory != 'Invasive Arterial' OR pe.locationcategory IS NULL)
-                      AND pe.itemid != 225789
+                      AND pe.itemid NOT IN (224272, 225789, 228286)
                       AND pe.statusdescription != 'Rewritten'
                 ),
                 cvl_intervals AS (
@@ -1185,9 +1615,7 @@ def step04_labs(con):
 
     con.execute(f"CREATE OR REPLACE VIEW cohort AS SELECT * FROM read_parquet('{inter('01_cohort')}')")
 
-    # Assign labs to ICU stays using hadm_id-scoped fuzzy ICU boundaries and
-    # adjacent stay lag/lead cutoffs, which is closer to official mimic-code
-    # semantics than the earlier subject_id-only nearest-intime heuristic.
+    # Source: pivot/pivoted_lab.sql — subject_id partition with halfway boundary split
     con.execute(f"""
         COPY (
             WITH icu_windows AS (
@@ -1197,76 +1625,76 @@ def step04_labs(con):
                     c.icustay_id,
                     c.intime,
                     c.outtime,
-                    LAG(c.outtime) OVER (
-                        PARTITION BY c.hadm_id
-                        ORDER BY c.intime, c.outtime, c.icustay_id
-                    ) AS prev_outtime,
-                    LEAD(c.intime) OVER (
-                        PARTITION BY c.hadm_id
-                        ORDER BY c.intime, c.outtime, c.icustay_id
-                    ) AS next_intime
+                    LAG(c.outtime)  OVER (PARTITION BY c.subject_id ORDER BY c.intime) AS prev_outtime,
+                    LEAD(c.intime)  OVER (PARTITION BY c.subject_id ORDER BY c.intime) AS next_intime
                 FROM cohort c
             ),
+            iid_assign AS (
+                SELECT
+                    subject_id, hadm_id, icustay_id, intime, outtime,
+                    CASE
+                        WHEN prev_outtime IS NOT NULL
+                         AND prev_outtime > intime - INTERVAL '24' HOUR
+                        THEN intime - (intime - prev_outtime) / 2
+                        ELSE intime - INTERVAL '12' HOUR
+                    END AS data_start,
+                    CASE
+                        WHEN next_intime IS NOT NULL
+                         AND next_intime < outtime + INTERVAL '24' HOUR
+                        THEN outtime + (next_intime - outtime) / 2
+                        ELSE outtime + INTERVAL '12' HOUR
+                    END AS data_end
+                FROM icu_windows
+            ),
             lab_raw AS (
-                SELECT subject_id, hadm_id, itemid, charttime, valuenum
+                SELECT subject_id, itemid, charttime, valuenum
                 FROM LABEVENTS
                 WHERE itemid IN ({ids_str})
-                  AND hadm_id IS NOT NULL
-                  AND valuenum IS NOT NULL
-                  AND valuenum > 0
+                  AND valuenum IS NOT NULL AND valuenum > 0
             ),
             assigned AS (
                 SELECT
-                    c.icustay_id,
+                    iid.icustay_id,
                     l.itemid,
                     l.charttime,
                     l.valuenum,
                     ROW_NUMBER() OVER (
-                        PARTITION BY l.hadm_id, l.charttime, l.itemid
+                        PARTITION BY l.subject_id, l.charttime, l.itemid
                         ORDER BY
-                            CASE
-                                WHEN l.charttime BETWEEN c.intime AND c.outtime THEN 0
-                                ELSE 1
-                            END,
-                            ABS(EPOCH(l.charttime) - EPOCH(c.intime))
+                            CASE WHEN l.charttime BETWEEN iid.intime AND iid.outtime THEN 0 ELSE 1 END,
+                            ABS(EPOCH(l.charttime) - EPOCH(iid.intime))
                     ) AS rn
                 FROM lab_raw l
-                JOIN icu_windows c
-                  ON l.hadm_id = c.hadm_id
-                WHERE l.charttime >= COALESCE(
-                        GREATEST(c.intime - INTERVAL '12' HOUR, c.prev_outtime),
-                        c.intime - INTERVAL '12' HOUR
-                    )
-                  AND l.charttime <= COALESCE(
-                        LEAST(c.outtime + INTERVAL '12' HOUR, c.next_intime),
-                        c.outtime + INTERVAL '12' HOUR
-                    )
+                JOIN iid_assign iid
+                  ON l.subject_id = iid.subject_id
+                WHERE l.charttime >= iid.data_start
+                  AND l.charttime <  iid.data_end
             )
             SELECT
                 icustay_id,
                 date_trunc('hour', charttime) AS charttime_floor,
-                -- core chemistry
+                -- core chemistry (Source: pivot/pivoted_lab.sql sanity check upper bounds)
                 AVG(CASE WHEN itemid = 50862 AND valuenum BETWEEN 0 AND 10    THEN valuenum END) AS albumin,
-                AVG(CASE WHEN itemid = 50868 AND valuenum BETWEEN 0 AND 60    THEN valuenum END) AS aniongap,
-                AVG(CASE WHEN itemid = 50882 AND valuenum BETWEEN 0 AND 80    THEN valuenum END) AS bicarbonate,
+                AVG(CASE WHEN itemid = 50868 AND valuenum BETWEEN 0 AND 10000 THEN valuenum END) AS aniongap,
+                AVG(CASE WHEN itemid = 50882 AND valuenum BETWEEN 0 AND 10000 THEN valuenum END) AS bicarbonate,
                 AVG(CASE WHEN itemid = 50885 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS bilirubin,
                 AVG(CASE WHEN itemid = 50883 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS bilirubin_direct,
                 AVG(CASE WHEN itemid = 50884 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS bilirubin_indirect,
                 AVG(CASE WHEN itemid = 51006 AND valuenum BETWEEN 0 AND 300   THEN valuenum END) AS bun,
                 AVG(CASE WHEN itemid = 50893 AND valuenum BETWEEN 0 AND 20    THEN valuenum END) AS calcium,
-                AVG(CASE WHEN itemid = 50902 AND valuenum BETWEEN 0 AND 200   THEN valuenum END) AS chloride,
-                AVG(CASE WHEN itemid = 50912 AND valuenum BETWEEN 0 AND 50    THEN valuenum END) AS creatinine,
-                AVG(CASE WHEN itemid = 50931 AND valuenum BETWEEN 0 AND 2000  THEN valuenum END) AS glucose_lab,
+                AVG(CASE WHEN itemid = 50902 AND valuenum BETWEEN 0 AND 10000 THEN valuenum END) AS chloride,
+                AVG(CASE WHEN itemid = 50912 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS creatinine,
+                AVG(CASE WHEN itemid = 50931 AND valuenum BETWEEN 0 AND 10000 THEN valuenum END) AS glucose_lab,
                 AVG(CASE WHEN itemid = 51221 AND valuenum BETWEEN 0 AND 100   THEN valuenum END) AS hematocrit,
                 AVG(CASE WHEN itemid = 51222 AND valuenum BETWEEN 0 AND 50    THEN valuenum END) AS hemoglobin,
-                AVG(CASE WHEN itemid = 51237 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS inr,
+                AVG(CASE WHEN itemid = 51237 AND valuenum BETWEEN 0 AND 50    THEN valuenum END) AS inr,
                 AVG(CASE WHEN itemid = 50813 AND valuenum BETWEEN 0 AND 50    THEN valuenum END) AS lactate,
                 AVG(CASE WHEN itemid = 50960 AND valuenum BETWEEN 0 AND 20    THEN valuenum END) AS magnesium,
                 AVG(CASE WHEN itemid = 50970 AND valuenum BETWEEN 0 AND 20    THEN valuenum END) AS phosphate,
                 AVG(CASE WHEN itemid = 51265 AND valuenum BETWEEN 0 AND 10000 THEN valuenum END) AS platelet,
                 AVG(CASE WHEN itemid = 50971 AND valuenum BETWEEN 0 AND 30    THEN valuenum END) AS potassium,
-                AVG(CASE WHEN itemid = 51275 AND valuenum BETWEEN 0 AND 300   THEN valuenum END) AS ptt,
-                AVG(CASE WHEN itemid = 50983 AND valuenum BETWEEN 0 AND 300   THEN valuenum END) AS sodium,
+                AVG(CASE WHEN itemid = 51275 AND valuenum BETWEEN 0 AND 150   THEN valuenum END) AS ptt,
+                AVG(CASE WHEN itemid = 50983 AND valuenum BETWEEN 0 AND 200   THEN valuenum END) AS sodium,
                 AVG(CASE WHEN itemid IN (51300,51301) AND valuenum BETWEEN 0 AND 1000 THEN valuenum END) AS wbc,
                 -- enzyme group
                 AVG(CASE WHEN itemid = 50861 AND valuenum BETWEEN 0 AND 10000  THEN valuenum END) AS alt,
@@ -1352,6 +1780,7 @@ def step05_bg(con):
         50826,  # tidal volume
         50827,  # ventilation rate
         50828,  # ventilator
+        50813,  # lactate (used by LR arterial specimen classifier in pivoted_bg_art.sql)
         51545,  # (官方 pivoted_bg.sql 包含，用于 specimen filter)
     ]
     ids_str = ",".join(str(i) for i in bg_ids)
@@ -1394,6 +1823,7 @@ def step05_bg(con):
             assigned AS (
                 SELECT
                     c.icustay_id,
+                    l.hadm_id,
                     l.itemid,
                     l.charttime,
                     l.value,
@@ -1427,6 +1857,108 @@ def step05_bg(con):
                 GROUP BY icustay_id, charttime
                 HAVING sum(CASE WHEN itemid = 50800 THEN 1 ELSE 0 END) < 2
             ),
+            draw_values AS (
+                -- Per-draw pivot of BG features needed for LR arterial specimen classifier
+                -- Source: pivot/pivoted_bg_art.sql
+                SELECT
+                    a.icustay_id, a.hadm_id, a.charttime,
+                    MAX(CASE WHEN a.itemid = 50800 THEN a.value END) AS specimen,
+                    MAX(CASE WHEN a.itemid = 50821 AND a.valuenum BETWEEN 0   AND 800  THEN a.valuenum END) AS po2,
+                    MAX(CASE WHEN a.itemid = 50817 AND a.valuenum BETWEEN 0   AND 100  THEN a.valuenum END) AS so2,
+                    MAX(CASE WHEN a.itemid = 50818 AND a.valuenum BETWEEN 0   AND 200  THEN a.valuenum END) AS pco2,
+                    MAX(CASE WHEN a.itemid = 50816 AND a.valuenum BETWEEN 20  AND 100  THEN a.valuenum END) AS fio2,
+                    MAX(CASE WHEN a.itemid = 50801 AND a.valuenum BETWEEN 0   AND 800  THEN a.valuenum END) AS aado2,
+                    MAX(CASE WHEN a.itemid = 50803 AND a.valuenum BETWEEN 0   AND 60   THEN a.valuenum END) AS bicarbonate_bg,
+                    MAX(CASE WHEN a.itemid = 50804 AND a.valuenum BETWEEN 0   AND 80   THEN a.valuenum END) AS totalco2,
+                    MAX(CASE WHEN a.itemid = 50811 AND a.valuenum BETWEEN 0   AND 40   THEN a.valuenum END) AS hemoglobin,
+                    MAX(CASE WHEN a.itemid = 50815 AND a.valuenum BETWEEN 0   AND 70   THEN a.valuenum END) AS o2flow,
+                    MAX(CASE WHEN a.itemid = 50820 AND a.valuenum BETWEEN 6.5 AND 8.0  THEN a.valuenum END) AS ph,
+                    MAX(CASE WHEN a.itemid = 50813 AND a.valuenum > 0                  THEN a.valuenum END) AS lactate
+                FROM assigned a
+                INNER JOIN bg_valid_draws v ON a.icustay_id = v.icustay_id AND a.charttime = v.charttime
+                WHERE a.rn = 1
+                GROUP BY a.icustay_id, a.hadm_id, a.charttime
+            ),
+            stg_spo2_draws AS (
+                -- SpO2 from CHARTEVENTS grouped by hadm_id per event, for 2h lookback
+                -- Source: pivot/pivoted_bg_art.sql stg_spo2 (official joins by hadm_id)
+                SELECT hadm_id, charttime, AVG(valuenum) AS spo2
+                FROM CHARTEVENTS
+                WHERE itemid IN (646, 220277)
+                  AND valuenum > 0 AND valuenum <= 100
+                GROUP BY hadm_id, charttime
+            ),
+            stg_fio2_draws AS (
+                -- FiO2 from CHARTEVENTS grouped by hadm_id, with unit normalization, for 4h lookback
+                -- Source: pivot/pivoted_bg_art.sql stg_fio2 (official joins by hadm_id)
+                SELECT hadm_id, charttime,
+                    MAX(CASE
+                        WHEN itemid = 223835 THEN
+                            CASE WHEN valuenum > 0 AND valuenum <= 1     THEN valuenum * 100
+                                 WHEN valuenum > 1 AND valuenum < 21     THEN NULL
+                                 WHEN valuenum >= 21 AND valuenum <= 100  THEN valuenum
+                                 ELSE NULL END
+                        WHEN itemid IN (3420, 3422) THEN valuenum
+                        WHEN itemid = 190 AND valuenum > 0.20 AND valuenum < 1 THEN valuenum * 100
+                        ELSE NULL END
+                    ) AS fio2_ce
+                FROM CHARTEVENTS
+                WHERE itemid IN (3420, 190, 223835, 3422)
+                  AND valuenum > 0 AND valuenum < 100
+                  AND (error IS NULL OR error != 1)
+                GROUP BY hadm_id, charttime
+            ),
+            draw_spo2 AS (
+                -- Most recent SpO2 within 2h before each blood gas draw, joined by hadm_id
+                -- Source: pivot/pivoted_bg_art.sql stg2
+                SELECT dv.icustay_id, dv.charttime,
+                    arg_max(s.spo2, s.charttime) AS spo2
+                FROM draw_values dv
+                LEFT JOIN stg_spo2_draws s
+                    ON dv.hadm_id = s.hadm_id
+                    AND s.charttime BETWEEN dv.charttime - INTERVAL '2' HOUR AND dv.charttime
+                GROUP BY dv.icustay_id, dv.charttime
+            ),
+            draw_fio2 AS (
+                -- Most recent FiO2 within 4h before each blood gas draw, joined by hadm_id
+                -- Source: pivot/pivoted_bg_art.sql stg3
+                SELECT dv.icustay_id, dv.charttime,
+                    arg_max(f.fio2_ce, f.charttime) AS fio2_ce
+                FROM draw_values dv
+                LEFT JOIN stg_fio2_draws f
+                    ON dv.hadm_id = f.hadm_id
+                    AND f.charttime BETWEEN dv.charttime - INTERVAL '4' HOUR AND dv.charttime
+                    AND f.fio2_ce > 0
+                GROUP BY dv.icustay_id, dv.charttime
+            ),
+            art_draws AS (
+                -- Flag each draw arterial: explicit ART label OR LR specimen_prob > 0.75
+                -- Source: pivot/pivoted_bg_art.sql final WHERE clause
+                SELECT dv.icustay_id, dv.charttime,
+                    CASE
+                        WHEN UPPER(dv.specimen) LIKE '%ART%' THEN 1
+                        WHEN dv.po2 IS NOT NULL AND
+                            1.0/(1.0+EXP(-(-0.02544
+                                + 0.04598  * dv.po2
+                                + COALESCE(-0.15356 * ds.spo2,           -0.15356 * 97.49420 +  0.13429)
+                                + COALESCE( 0.00621 * df.fio2_ce,         0.00621 * 51.49550 + -0.24958)
+                                + COALESCE( 0.10559 * dv.hemoglobin,      0.10559 * 10.32307 +  0.05954)
+                                + COALESCE( 0.13251 * dv.so2,             0.13251 * 93.66539 + -0.23172)
+                                + COALESCE(-0.01511 * dv.pco2,           -0.01511 * 42.08866 + -0.01630)
+                                + COALESCE( 0.01480 * dv.fio2,            0.01480 * 63.97836 + -0.31142)
+                                + COALESCE(-0.00200 * dv.aado2,          -0.00200 *442.21186 + -0.01328)
+                                + COALESCE(-0.03220 * dv.bicarbonate_bg, -0.03220 * 22.96894 + -0.06535)
+                                + COALESCE( 0.05384 * dv.totalco2,        0.05384 * 24.72632 + -0.01405)
+                                + COALESCE( 0.08202 * dv.lactate,         0.08202 *  3.06436 +  0.06038)
+                                + COALESCE( 0.10956 * dv.ph,              0.10956 *  7.36233 + -0.00617)
+                                + COALESCE( 0.00848 * dv.o2flow,          0.00848 *  7.59362 + -0.35803)
+                            ))) > 0.75 THEN 1
+                        ELSE 0
+                    END AS is_arterial
+                FROM draw_values dv
+                LEFT JOIN draw_spo2 ds ON dv.icustay_id = ds.icustay_id AND dv.charttime = ds.charttime
+                LEFT JOIN draw_fio2 df ON dv.icustay_id = df.icustay_id AND dv.charttime = df.charttime
+            ),
             bg_hourly AS (
                 SELECT
                     a.icustay_id,
@@ -1434,8 +1966,10 @@ def step05_bg(con):
                     arg_max(CASE WHEN a.itemid = 50800 THEN a.value END, a.charttime) AS specimen_bg,
                     AVG(CASE WHEN a.itemid = 50820 AND a.valuenum BETWEEN 6.5 AND 8.0  THEN a.valuenum END) AS ph,
                     AVG(CASE WHEN a.itemid = 50818 AND a.valuenum BETWEEN 0 AND 200     THEN a.valuenum END) AS pco2,
+                    AVG(CASE WHEN a.itemid = 50821 AND a.valuenum BETWEEN 0 AND 800
+                              AND ds.is_arterial = 1                                    THEN a.valuenum END) AS po2_art,
                     AVG(CASE WHEN a.itemid = 50821 AND a.valuenum BETWEEN 0 AND 800     THEN a.valuenum END) AS po2,
-                    AVG(CASE WHEN a.itemid = 50816 AND a.valuenum BETWEEN 21 AND 100    THEN a.valuenum END) AS fio2_lab,
+                    AVG(CASE WHEN a.itemid = 50816 AND a.valuenum BETWEEN 20 AND 100    THEN a.valuenum END) AS fio2_lab,
                     AVG(CASE WHEN a.itemid = 50801 AND a.valuenum BETWEEN 0 AND 800     THEN a.valuenum END) AS aado2,
                     AVG(CASE WHEN a.itemid = 50802 AND a.valuenum BETWEEN -30 AND 30    THEN a.valuenum END) AS baseexcess,
                     AVG(CASE WHEN a.itemid = 50803 AND a.valuenum BETWEEN 0 AND 60      THEN a.valuenum END) AS bicarbonate_bg,
@@ -1461,6 +1995,8 @@ def step05_bg(con):
                 FROM assigned a
                 INNER JOIN bg_valid_draws v
                     ON a.icustay_id = v.icustay_id AND a.charttime = v.charttime
+                LEFT JOIN art_draws ds
+                    ON a.icustay_id = ds.icustay_id AND a.charttime = ds.charttime
                 WHERE a.rn = 1
                 GROUP BY a.icustay_id, date_trunc('hour', a.charttime)
             )
@@ -1470,6 +2006,7 @@ def step05_bg(con):
                 b.specimen_bg,
                 b.ph,
                 b.pco2,
+                b.po2_art,
                 b.po2,
                 COALESCE(b.fio2_lab, f.fio2_chartevents) AS fio2_bg,
                 b.aado2,
@@ -1529,8 +2066,8 @@ def step07_uo(con):
                     CASE WHEN oe.itemid = 227488 THEN -oe.value ELSE oe.value END AS urineoutput
                 FROM OUTPUTEVENTS oe
                 INNER JOIN cohort c ON oe.icustay_id = c.icustay_id
+                -- Source: pivot/pivoted_uo.sql
                 WHERE oe.itemid IN ({ids_str})
-                  AND oe.value IS NOT NULL
                   AND oe.icustay_id IS NOT NULL
                   AND (oe.iserror IS NULL OR oe.iserror != 1)
             ),
@@ -1606,6 +2143,7 @@ def step07_uo(con):
 
 # ---------------------------------------------------------------------------
 # Step 8: vasopressors from INPUTEVENTS_MV + INPUTEVENTS_CV
+# Source: concepts/durations/vasopressor_durations.sql + individual *_dose.sql files
 # ---------------------------------------------------------------------------
 def step08_vaso(con):
     name = "08_vaso"
@@ -1629,7 +2167,9 @@ def step08_vaso(con):
     # Metabolic
     mv_ins     = [223258, 223257, 223260]; cv_ins = [30045, 30100]
     # Neuromuscular blockade
-    mv_nmb     = [221555, 222062]; cv_nmb = [30105, 30106]
+    # Source: concepts/durations/neuroblock_dose.sql
+    mv_nmb     = [221555, 222062]
+    cv_nmb     = [30114, 30138, 30113, 42174, 42385, 41916, 42100, 42045, 42246, 42291, 42590, 42284, 45096]
     # Crystalloids (NS, LR, D5W)
     mv_cryst   = [225158, 225944, 225828, 220964, 225159, 225161]
     cv_cryst   = [30018, 30021, 30056, 30057, 30015, 30060, 30023, 30020, 30162]
@@ -1638,10 +2178,11 @@ def step08_vaso(con):
     cv_colloid = [30008, 30011, 30012, 30001, 30104, 30005, 30006]
 
     # Official fluid-balance concept families
-    mv_cryst_bolus = [225158, 225828, 225944, 225797, 225159, 225161, 225823, 225825, 225827, 225941, 226089]
+    # Source: fluid_balance/crystalloid_bolus.sql (225161/30143 = hypertonic saline, excluded per official)
+    mv_cryst_bolus = [225158, 225828, 225944, 225797, 225159, 225823, 225825, 225827, 225941, 226089]
     cv_cryst_bolus = [
         30015, 30018, 30020, 30021, 30058, 30060, 30061, 30063, 30065,
-        30143, 30159, 30160, 30169, 30190, 40850, 41491, 42639, 42187,
+        30159, 30160, 30169, 30190, 40850, 41491, 42639, 42187,
         43819, 41430, 40712, 44160, 42383, 42297, 42453, 40872, 41915,
         41490, 46501, 45045, 41984, 41371, 41582, 41322, 40778, 41896,
         41428, 43936, 44200, 41619, 40424, 41457, 41581, 42844, 42429,
@@ -1651,12 +2192,16 @@ def step08_vaso(con):
         41392, 45989, 45137, 45154, 44053, 41416, 44761, 41237, 44426,
         43975, 44894, 41380, 42671
     ]
-    mv_colloid_bolus = [220864, 220862, 225174, 225795, 225796, 221000, 221001, 221002, 221003]
-    cv_colloid_bolus = [30008, 30009, 42832, 40548, 45403, 44203, 30181, 46564, 43237, 43353, 44952, 30012, 46313, 30011, 42975, 42944, 46336, 46729, 40033, 45410, 42731]
-    cv_rbc = [30179, 30001, 30004]
-    mv_rbc = [225168]
-    cv_ffp = [30005, 30103, 30180, 42185, 42323, 43009, 44044, 44172, 44236, 44819, 45669, 46122, 46410, 46418, 46530, 46684]
-    mv_ffp = [220970, 220971, 226367, 227072]
+    # Source: fluid_balance/colloid_bolus.sql
+    mv_colloid_bolus = [220864, 220862, 225174, 225795, 225796]
+    cv_colloid_bolus = [30008, 30009, 42832, 40548, 45403, 44203, 30181, 46564, 43237, 43353, 30012, 46313, 30011, 30016, 42975, 42944, 46336, 46729, 40033, 45410, 42731]
+    ce_colloid_bolus = [2510, 3087, 6937, 3088]  # colloids charted in CHARTEVENTS (t3)
+    # Source: fluid_balance/rbc_transfusion.sql (raw_rbc + pre_icu_rbc)
+    cv_rbc = [30179, 30001, 30004, 42324, 42588, 42239, 46407, 46612, 46124, 42740]
+    mv_rbc = [225168, 227070]
+    # Source: fluid_balance/ffp_transfusion.sql
+    cv_ffp = [30005, 30180, 42323, 44044, 44172, 44236, 44819, 45669, 46122, 46410, 46418, 46530, 46684]
+    mv_ffp = [220970, 227072]
 
     all_mv = list(set(
         mv_norepi + mv_epi + mv_dopa + mv_dobu + mv_vaso + mv_phenyl + mv_milri +
@@ -1849,13 +2394,18 @@ def step08_vaso(con):
                 SELECT
                     cv.icustay_id,
                     date_trunc('hour', cv.charttime) AS charttime_floor,
-                    MAX(CASE WHEN cv.itemid = 30047 THEN TRY_CAST(cv.rate AS DOUBLE) / NULLIF(wt.weight_kg, 0)
+                    MAX(CASE WHEN cv.itemid = 30047 THEN TRY_CAST(cv.rate AS DOUBLE) / NULLIF(COALESCE(wt.weight_kg, 80.0), 0)
                              WHEN cv.itemid = 30120 THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_norepinephrine,
-                    MAX(CASE WHEN cv.itemid = 30044 THEN TRY_CAST(cv.rate AS DOUBLE) / NULLIF(wt.weight_kg, 0)
+                    MAX(CASE WHEN cv.itemid = 30044 THEN TRY_CAST(cv.rate AS DOUBLE) / NULLIF(COALESCE(wt.weight_kg, 80.0), 0)
                              WHEN cv.itemid IN (30119,30309) THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_epinephrine,
                     MAX(CASE WHEN cv.itemid IN ({ids(cv_dopa)})   THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_dopamine,
                     MAX(CASE WHEN cv.itemid IN ({ids(cv_dobu)})   THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_dobutamine,
-                    MAX(CASE WHEN cv.itemid IN ({ids(cv_vaso)})   THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_vasopressin,
+                    MAX(CASE WHEN cv.itemid IN ({ids(cv_vaso)})
+                             -- itemids 42273/42802 accidentally store rate in amount column
+                             THEN CASE WHEN cv.itemid IN (42273, 42802)
+                                       THEN TRY_CAST(cv.amount AS DOUBLE)
+                                       ELSE TRY_CAST(cv.rate AS DOUBLE) END
+                             END) AS rate_vasopressin,
                     MAX(CASE WHEN cv.itemid IN ({ids(cv_phenyl)}) THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_phenylephrine,
                     MAX(CASE WHEN cv.itemid IN ({ids(cv_milri)})  THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_milrinone,
                     MAX(CASE WHEN cv.itemid IN ({ids(cv_prop)})   THEN TRY_CAST(cv.rate AS DOUBLE) END) AS rate_propofol,
@@ -1898,6 +2448,23 @@ def step08_vaso(con):
                 LEFT JOIN wt ON cv.icustay_id = wt.icustay_id
                 WHERE cv.itemid IN ({ids(all_cv)})
                 GROUP BY cv.icustay_id, date_trunc('hour', cv.charttime)
+            ),
+            -- Source: fluid_balance/colloid_bolus.sql t3 (colloids charted in CHARTEVENTS)
+            ce_colloid AS (
+                SELECT
+                    ce.icustay_id,
+                    date_trunc('hour', ce.charttime) AS charttime_floor,
+                    SUM(CASE
+                        WHEN ce.valuenum IS NOT NULL
+                         AND ce.valuenum > 100
+                         AND ce.valuenum < 2000
+                        THEN ROUND(ce.valuenum) ELSE 0
+                    END) AS colloid_bolus_ml
+                FROM CHARTEVENTS ce
+                WHERE ce.itemid IN ({ids(ce_colloid_bolus)})
+                  AND ce.icustay_id IS NOT NULL
+                  AND (ce.error IS NULL OR ce.error != 1)
+                GROUP BY ce.icustay_id, date_trunc('hour', ce.charttime)
             )
             SELECT
                 COALESCE(mv.icustay_id, cv.icustay_id)             AS icustay_id,
@@ -1916,7 +2483,7 @@ def step08_vaso(con):
                 COALESCE(mv.rate_insulin,        cv.rate_insulin,        0.0) AS rate_insulin,
                 COALESCE(mv.nmb_flag,            cv.nmb_flag,            0)   AS nmb_flag,
                 COALESCE(mv.crystalloid_bolus_ml,cv.crystalloid_bolus_ml,0.0) AS crystalloid_bolus_ml,
-                COALESCE(mv.colloid_bolus_ml,    cv.colloid_bolus_ml,    0.0) AS colloid_bolus_ml,
+                COALESCE(mv.colloid_bolus_ml, 0.0) + COALESCE(cv.colloid_bolus_ml, 0.0) + COALESCE(ce_colloid.colloid_bolus_ml, 0.0) AS colloid_bolus_ml,
                 COALESCE(mv.rbc_transfusion_ml,  cv.rbc_transfusion_ml,  0.0) AS rbc_transfusion_ml,
                 COALESCE(mv.ffp_transfusion_ml,  cv.ffp_transfusion_ml,  0.0) AS ffp_transfusion_ml,
                 COALESCE(mv.crystalloid_ml,      cv.crystalloid_ml,      0.0) AS crystalloid_ml,
@@ -1931,6 +2498,9 @@ def step08_vaso(con):
             FULL OUTER JOIN cv
               ON mv.icustay_id = cv.icustay_id
              AND mv.charttime_floor = cv.charttime_floor
+            LEFT JOIN ce_colloid
+              ON COALESCE(mv.icustay_id, cv.icustay_id) = ce_colloid.icustay_id
+             AND COALESCE(mv.charttime_floor, cv.charttime_floor) = ce_colloid.charttime_floor
         ) TO '{inter(name)}' (FORMAT PARQUET)
     """)
     log.info("step08 done %.1fs", time.time() - t0)
@@ -2141,7 +2711,8 @@ def step09_suspinfect(con):
 
 
 # ---------------------------------------------------------------------------
-# Step 10b: static features per ICU stay (demographics + care unit)
+# Step 10b: static features per ICU stay
+# Source: concepts/demographics/icustay_detail.sql
 # ---------------------------------------------------------------------------
 def step_static(con):
     name = "static"
@@ -2175,6 +2746,8 @@ def step_static(con):
                     WHEN a.ethnicity IN ('UNKNOWN/NOT SPECIFIED','UNABLE TO OBTAIN','PATIENT DECLINED TO ANSWER') THEN 'unknown'
                     ELSE 'other'
                 END AS ethnicity_grouped,
+                a.admittime,
+                a.dischtime,
                 a.marital_status,
                 p.dod,
                 p.dod_hosp,
@@ -2492,6 +3065,67 @@ def step_elixhauser(con):
               + 4 * ea.solid_tumor
               + -1 * ea.valvular_disease
               + 6 * ea.weight_loss AS elixhauser_vanwalraven
+              -- Source: comorbidity/elixhauser_score_quan.sql SID29 (cardiac_arrhythmias excluded)
+            , 0 * ea.aids
+              + -2 * ea.alcohol_abuse
+              + -2 * ea.blood_loss_anemia
+              + 9 * ea.congestive_heart_failure
+              + 3 * ea.chronic_pulmonary
+              + 9 * ea.coagulopathy
+              + 0 * ea.deficiency_anemias
+              + -4 * ea.depression
+              + 0 * ea.diabetes_complicated
+              + -1 * ea.diabetes_uncomplicated
+              + -8 * ea.drug_abuse
+              + 9 * ea.fluid_electrolyte
+              + -1 * ea.hypertension
+              + 0 * ea.hypothyroidism
+              + 5 * ea.liver_disease
+              + 6 * ea.lymphoma
+              + 13 * ea.metastatic_cancer
+              + 4 * ea.other_neurological
+              + -4 * ea.obesity
+              + 3 * ea.paralysis
+              + 0 * ea.peptic_ulcer
+              + 4 * ea.peripheral_vascular
+              + -4 * ea.psychoses
+              + 5 * ea.pulmonary_circulation
+              + 6 * ea.renal_failure
+              + 0 * ea.rheumatoid_arthritis
+              + 8 * ea.solid_tumor
+              + 0 * ea.valvular_disease
+              + 8 * ea.weight_loss AS elixhauser_SID29
+              -- Source: comorbidity/elixhauser_score_quan.sql SID30 (cardiac_arrhythmias included)
+            , 0 * ea.aids
+              + 0 * ea.alcohol_abuse
+              + -3 * ea.blood_loss_anemia
+              + 8 * ea.cardiac_arrhythmias
+              + 9 * ea.congestive_heart_failure
+              + 3 * ea.chronic_pulmonary
+              + 12 * ea.coagulopathy
+              + 0 * ea.deficiency_anemias
+              + -5 * ea.depression
+              + 1 * ea.diabetes_complicated
+              + 0 * ea.diabetes_uncomplicated
+              + -11 * ea.drug_abuse
+              + 11 * ea.fluid_electrolyte
+              + -2 * ea.hypertension
+              + 0 * ea.hypothyroidism
+              + 7 * ea.liver_disease
+              + 8 * ea.lymphoma
+              + 17 * ea.metastatic_cancer
+              + 5 * ea.other_neurological
+              + -5 * ea.obesity
+              + 4 * ea.paralysis
+              + 0 * ea.peptic_ulcer
+              + 4 * ea.peripheral_vascular
+              + -6 * ea.psychoses
+              + 5 * ea.pulmonary_circulation
+              + 7 * ea.renal_failure
+              + 0 * ea.rheumatoid_arthritis
+              + 10 * ea.solid_tumor
+              + 0 * ea.valvular_disease
+              + 10 * ea.weight_loss AS elixhauser_SID30
             FROM cohort c
             LEFT JOIN elix_adm ea ON c.hadm_id = ea.hadm_id
         ) TO '{inter(name)}' (FORMAT PARQUET)
@@ -2642,48 +3276,210 @@ def step_prescription_flags(con):
 
 
 # ---------------------------------------------------------------------------
-# CRRT flag from PROCEDUREEVENTS_MV (MetaVision patients)
-# Combined with crrt_cv.parquet from CHARTEVENTS (step03_06_10)
+# Dialysis — CHARTEVENTS + INPUTEVENTS_CV + OUTPUTEVENTS + MV intervals
+# Source: pivot/pivoted_rrt.sql
 # ---------------------------------------------------------------------------
 def step_crrt(con):
     name = "crrt"
     if exists(name):
         log.info("step_crrt cached"); return
     t0 = time.time()
-    crrt_mv_ids = [225802, 225803, 225805, 225809, 225441, 226118]
-    ids_str     = ",".join(str(i) for i in crrt_mv_ids)
-    con.execute(f"CREATE OR REPLACE VIEW time_axis AS SELECT * FROM read_parquet('{inter('02_time_axis')}')")
-    con.execute(f"CREATE OR REPLACE VIEW crrt_cv  AS SELECT * FROM read_parquet('{inter('crrt_cv')}')")
+    log.info("step_crrt dialysis (pivoted_rrt style)...")
+    con.execute(f"CREATE OR REPLACE VIEW crrt_cv AS SELECT * FROM read_parquet('{inter('crrt_cv')}')")
+
+    # Source: pivot/pivoted_rrt.sql (cv_ie CTE)
+    cv_ie_ids = [
+        40788, 40907, 41063, 41147, 41307, 41460, 41620, 41711, 41791, 41792,
+        42562, 43829, 44037, 44188, 44526, 44527, 44584, 44591, 44698, 44927,
+        44954, 45157, 45268, 45352, 45353, 46012, 46013, 46172, 46173, 46250,
+        46262, 46292, 46293, 46311, 46389, 46574, 46681, 46720, 46769, 46773,
+    ]
+    # Source: pivot/pivoted_rrt.sql (oe CTE)
+    oe_ids = [
+        40386, 40425, 40426, 40507, 40613, 40624, 40690, 40745, 40789, 40881,
+        40910, 41016, 41034, 41069, 41112, 41250, 41374, 41417, 41500, 41527,
+        41623, 41635, 41713, 41750, 41829, 41842, 41897, 42289, 42388, 42464,
+        42524, 42536, 42868, 42928, 42972, 43016, 43052, 43098, 43115, 43687,
+        43941, 44027, 44085, 44193, 44199, 44216, 44286, 44567, 44843, 44845,
+        44857, 44901, 44943, 45479, 45828, 46230, 46232, 46394, 46464, 46712,
+        46713, 46715, 46741,
+    ]
+    # Source: pivot/pivoted_rrt.sql (mv_ranges CTE — INPUTEVENTS_MV medications)
+    mv_ie_ids  = [227536, 227525]
+    # Source: pivot/pivoted_rrt.sql (mv_ranges CTE — PROCEDUREEVENTS_MV procedures)
+    mv_pe_ids  = [225441, 225802, 225803, 225805, 224270, 225809, 225955, 225436]
+
+    cv_ie_str  = ",".join(str(i) for i in cv_ie_ids)
+    oe_str     = ",".join(str(i) for i in oe_ids)
+    mv_ie_str  = ",".join(str(i) for i in mv_ie_ids)
+    mv_pe_str  = ",".join(str(i) for i in mv_pe_ids)
+
     con.execute(f"""
         COPY (
-            WITH crrt_mv_intervals AS (
+            -- Source: pivot/pivoted_rrt.sql
+            WITH ce AS (
                 SELECT
                     icustay_id,
-                    starttime,
-                    COALESCE(
-                        NULLIF(endtime, starttime),
-                        starttime + INTERVAL '1' MINUTE
-                    ) AS endtime
-                FROM PROCEDUREEVENTS_MV
-                WHERE itemid IN ({ids_str})
-                  AND icustay_id IS NOT NULL
-                  AND starttime IS NOT NULL
+                    charttime_floor,
+                    CASE
+                        WHEN itemid IN (146,147,148,149,150,151,152) THEN 1
+                        WHEN itemid = 582 AND value IN (
+                            'CAVH Start','CVVHD Start','Hemodialysis st',
+                            'CAVH D/C','CVVHD D/C','Hemodialysis end','Peritoneal Dial'
+                        ) THEN 1
+                        WHEN itemid IN (229,235,241,247,253,259,265,271) AND value = 'Dialysis Line' THEN 1
+                        WHEN itemid IN (226118,227357,225725) THEN 1
+                        WHEN itemid IN (
+                            226499,224154,225810,225959,227639,225183,227438,224191,
+                            225806,225807,228004,228005,228006,224144,224145,224149,
+                            224150,224151,224152,224153,224404,224406,226457
+                        ) THEN 1
+                        WHEN itemid IN (
+                            224135,224139,224146,225323,225740,225776,225951,225952,
+                            225953,225954,225956,225958,225961,225963,225965,225976,
+                            225977,227124,227290,227638,227640,227753
+                        ) THEN 1
+                        ELSE 0
+                    END AS dialysis_present,
+                    CASE
+                        WHEN itemid = 582 AND value IN ('CAVH Start','CVVHD Start','Hemodialysis st','Peritoneal Dial') THEN 1
+                        WHEN itemid = 582 AND value IN ('CAVH D/C','CVVHD D/C','Hemodialysis end') THEN 0
+                        WHEN itemid = 147  AND value = 'Yes'    THEN 1
+                        WHEN itemid = 225965 AND value = 'In use' THEN 1
+                        WHEN itemid IN (
+                            146,226499,224154,225183,227438,224191,
+                            225806,225807,228004,228005,228006,224144,224145,224153,226457
+                        ) THEN 1
+                        ELSE 0
+                    END AS dialysis_active,
+                    CASE
+                        WHEN itemid IN (152,227290) THEN
+                            CASE value
+                                WHEN 'CVVH'       THEN 'CVVH'
+                                WHEN 'CVVHD'      THEN 'CVVHD'
+                                WHEN 'CVVHDF'     THEN 'CVVHDF'
+                                WHEN 'SCUF'       THEN 'SCUF'
+                                WHEN 'Peritoneal' THEN 'Peritoneal'
+                                ELSE NULL
+                            END
+                        WHEN itemid IN (
+                            225810,225806,225807,227639,225959,225951,225952,
+                            225961,225953,225963,225965,227638,227640
+                        ) THEN 'Peritoneal'
+                        WHEN itemid = 226499 THEN 'IHD'
+                        WHEN itemid = 582 THEN
+                            CASE
+                                WHEN value IN ('CAVH Start','CAVH D/C')       THEN 'CAVH'
+                                WHEN value IN ('CVVHD Start','CVVHD D/C')     THEN 'CVVHD'
+                                WHEN value IN ('Hemodialysis st','Hemodialysis end') THEN NULL
+                                ELSE NULL
+                            END
+                        ELSE NULL
+                    END AS dialysis_type
+                FROM crrt_cv
             ),
-            crrt_mv_hours AS (
-                SELECT DISTINCT t.icustay_id, t.charttime_floor
-                FROM time_axis t
-                JOIN crrt_mv_intervals p ON t.icustay_id = p.icustay_id
-                WHERE t.charttime_floor < p.endtime
-                  AND t.charttime_floor + INTERVAL '1' HOUR > p.starttime
+            cv_ie AS (
+                SELECT
+                    icustay_id,
+                    date_trunc('hour', charttime) AS charttime_floor,
+                    1 AS dialysis_present,
+                    CASE WHEN itemid NOT IN (44954) THEN 1 ELSE 0 END AS dialysis_active,
+                    CASE
+                        WHEN itemid IN (40788,41063,41307,43829,44698,46720) THEN 'Peritoneal'
+                        WHEN itemid IN (45352,45353)                         THEN 'CVVH'
+                        WHEN itemid IN (45268,46769,46773)                   THEN 'CVVHD'
+                        WHEN itemid IN (46012,46013,46172,46173)             THEN 'CVVHDF'
+                        ELSE NULL
+                    END AS dialysis_type
+                FROM INPUTEVENTS_CV
+                WHERE itemid IN ({cv_ie_str})
+                  AND amount > 0
+                  AND icustay_id IS NOT NULL
+            ),
+            oe AS (
+                SELECT
+                    icustay_id,
+                    date_trunc('hour', charttime) AS charttime_floor,
+                    1 AS dialysis_present,
+                    CASE WHEN itemid NOT IN (41897) THEN 1 ELSE 0 END AS dialysis_active,
+                    CASE
+                        WHEN itemid IN (40789,40910,41069,44843,46394) THEN 'Peritoneal'
+                        ELSE NULL
+                    END AS dialysis_type
+                FROM OUTPUTEVENTS
+                WHERE itemid IN ({oe_str})
+                  AND value > 0
+                  AND icustay_id IS NOT NULL
+            ),
+            mv_ranges AS (
+                SELECT icustay_id, starttime, endtime,
+                    1 AS dialysis_present,
+                    1 AS dialysis_active,
+                    'CRRT' AS dialysis_type
+                FROM INPUTEVENTS_MV
+                WHERE itemid IN ({mv_ie_str})
+                  AND amount > 0
+                  AND icustay_id IS NOT NULL
+                UNION DISTINCT
+                SELECT icustay_id, starttime, endtime,
+                    1 AS dialysis_present,
+                    CASE WHEN itemid NOT IN (224270,225436) THEN 1 ELSE 0 END AS dialysis_active,
+                    CASE
+                        WHEN itemid = 225441 THEN 'IHD'
+                        WHEN itemid = 225802 THEN 'CRRT'
+                        WHEN itemid = 225803 THEN 'CVVHD'
+                        WHEN itemid = 225805 THEN 'Peritoneal'
+                        WHEN itemid = 225809 THEN 'CVVHDF'
+                        WHEN itemid = 225955 THEN 'SCUF'
+                        ELSE NULL
+                    END AS dialysis_type
+                FROM PROCEDUREEVENTS_MV
+                WHERE itemid IN ({mv_pe_str})
+                  AND value IS NOT NULL
+                  AND icustay_id IS NOT NULL
+            ),
+            stg0 AS (
+                SELECT icustay_id, charttime_floor, dialysis_present, dialysis_active, dialysis_type
+                FROM ce WHERE dialysis_present = 1
+                UNION DISTINCT
+                SELECT icustay_id, charttime_floor, dialysis_present, dialysis_active, dialysis_type
+                FROM cv_ie WHERE dialysis_present = 1
+                UNION DISTINCT
+                SELECT icustay_id, charttime_floor, dialysis_present, dialysis_active, dialysis_type
+                FROM oe WHERE dialysis_present = 1
+                UNION DISTINCT
+                SELECT icustay_id, date_trunc('hour', starttime) AS charttime_floor,
+                    dialysis_present, dialysis_active, dialysis_type
+                FROM mv_ranges
+                UNION DISTINCT
+                SELECT icustay_id, date_trunc('hour', endtime) AS charttime_floor,
+                    dialysis_present, dialysis_active, dialysis_type
+                FROM mv_ranges
             )
+            -- Collapse to one row per (icustay_id, charttime_floor) for the hourly wide-table join.
+            -- Multiple stg0 sources can produce different dialysis_type for the same hour;
+            -- mv.dialysis_type takes precedence (COALESCE), then MAX picks the non-NULL winner.
             SELECT
-                COALESCE(mv.icustay_id, cv.icustay_id)         AS icustay_id,
-                COALESCE(mv.charttime_floor, cv.charttime_floor) AS charttime_floor,
-                1 AS crrt_flag
-            FROM crrt_mv_hours mv
-            FULL OUTER JOIN crrt_cv cv
-              ON mv.icustay_id = cv.icustay_id
-             AND mv.charttime_floor = cv.charttime_floor
+                icustay_id,
+                charttime_floor,
+                MAX(dialysis_present) AS dialysis_present,
+                MAX(dialysis_active)  AS dialysis_active,
+                MAX(dialysis_type)    AS dialysis_type
+            FROM (
+                SELECT
+                    stg0.icustay_id,
+                    stg0.charttime_floor,
+                    COALESCE(mv.dialysis_present, stg0.dialysis_present) AS dialysis_present,
+                    COALESCE(mv.dialysis_active,  stg0.dialysis_active)  AS dialysis_active,
+                    COALESCE(mv.dialysis_type,    stg0.dialysis_type)    AS dialysis_type
+                FROM stg0
+                LEFT JOIN mv_ranges mv
+                  ON stg0.icustay_id = mv.icustay_id
+                 AND stg0.charttime_floor >= date_trunc('hour', mv.starttime)
+                 AND stg0.charttime_floor <= date_trunc('hour', mv.endtime)
+                WHERE stg0.icustay_id IS NOT NULL
+            ) sub
+            GROUP BY icustay_id, charttime_floor
         ) TO '{inter(name)}' (FORMAT PARQUET)
     """)
     log.info("step_crrt done %.1fs", time.time() - t0)
@@ -2747,6 +3543,8 @@ def step11_join(con):
                 sf.insurance,
                 sf.ethnicity,
                 sf.ethnicity_grouped,
+                sf.admittime,
+                sf.dischtime,
                 sf.marital_status,
                 sf.dod,
                 sf.dod_hosp,
@@ -2792,13 +3590,19 @@ def step11_join(con):
                 elix.psychoses,
                 elix.depression,
                 elix.elixhauser_vanwalraven,
+                elix.elixhauser_SID29,
+                elix.elixhauser_SID30,
 
                 -- hospital service (time-varying)
                 svc.curr_service,
 
-                -- anthropometrics
-                hw.height_cm,
-                hw.weight_kg,
+                -- anthropometrics (官方 heightweight.sql: first/min/max)
+                hw.height_first,
+                hw.height_min,
+                hw.height_max,
+                hw.weight_first,
+                hw.weight_min,
+                hw.weight_max,
 
                 -- vitals
                 v.heartrate,
@@ -2811,15 +3615,11 @@ def step11_join(con):
                 v.glucose,
                 v.etco2,
 
-                -- GCS (不填默认值，pre-ICU 行保持 NULL)
+                -- GCS (carry-forward + sedation imputation per pivoted_gcs.sql)
+                g.gcs_total,
                 g.gcs_motor,
                 g.gcs_verbal,
                 g.gcs_eyes,
-                CASE
-                    WHEN g.gcs_motor IS NOT NULL AND g.gcs_verbal IS NOT NULL AND g.gcs_eyes IS NOT NULL
-                    THEN g.gcs_motor + g.gcs_verbal + g.gcs_eyes
-                    ELSE NULL
-                END AS gcs_total,
                 g.gcs_sedated,
 
                 -- blood gas
@@ -3001,8 +3801,10 @@ def step11_join(con):
                 cs.dncpr_first_charttime,
                 cs.timecmo_chart,
 
-                -- CRRT
-                COALESCE(crrt.crrt_flag, 0) AS crrt_flag,
+                -- dialysis (Source: pivot/pivoted_rrt.sql)
+                COALESCE(crrt.dialysis_present, 0) AS dialysis_present,
+                COALESCE(crrt.dialysis_active,  0) AS dialysis_active,
+                crrt.dialysis_type                 AS dialysis_type,
 
                 -- prescriptions
                 COALESCE(rx.antibiotic_flag, 0) AS antibiotic_flag,
@@ -3086,7 +3888,7 @@ def step12_sepsis_label(con):
                     l.creatinine,
                     l.bilirubin,
                     l.platelet,
-                    bg.po2,
+                    bg.po2_art AS po2,
                     bg.fio2_bg AS fio2,
                     COALESCE(ve.vent_invasive_flag, 0) AS vent_invasive_flag,
                     COALESCE(ve.vent_noninvasive_flag, 0) AS vent_noninvasive_flag,
@@ -3112,9 +3914,14 @@ def step12_sepsis_label(con):
                 LEFT JOIN uo         ON t.icustay_id = uo.icustay_id AND t.charttime_floor = uo.charttime_floor
                 LEFT JOIN vent    ve ON t.icustay_id = ve.icustay_id AND t.charttime_floor = ve.charttime_floor
             ),
-            -- Official approach (pivoted_sofa.sql):
-            -- 1) score each hour from raw values (no LOCF)
-            -- 2) take MAX of scores over 24 PRECEDING window
+            -- Pass sofa_raw through unchanged; uo_24hr from step07 already carries the
+            -- observation-time-aware 24h normalised UO (NULL until >=22h coverage).
+            uo_rolling AS (
+                SELECT * FROM sofa_raw
+            ),
+            -- Score each hour from raw values (no LOCF); renal uses uo_24hr (MIMIC-IV style,
+            -- observation-time-aware) instead of official MIMIC-III rolling sum.
+            -- MAX of per-hour scores over 24 PRECEDING window applied in score_final below.
             scorecomp AS (
                 SELECT
                     icustay_id,
@@ -3194,9 +4001,7 @@ def step12_sepsis_label(con):
                         WHEN gcs_measured IS NULL THEN NULL
                         ELSE 0
                     END AS cns,
-                    -- renal: use observation-time-aware uo_24hr (mirrors MIMIC-IV approach).
-                    -- uo_24hr is only non-null when >= 22h of UO events exist in the prior 24h window,
-                    -- which avoids the early-hours truncation problem of rolling SUM OVER 23 PRECEDING.
+                    -- renal: use uo_24hr from step07 (observation-time-aware; NULL until >=22h coverage)
                     CASE
                         WHEN creatinine >= 5.0 THEN 4
                         WHEN uo_24hr < 200 THEN 4
@@ -3207,7 +4012,7 @@ def step12_sepsis_label(con):
                         WHEN COALESCE(uo_24hr, creatinine) IS NULL THEN NULL
                         ELSE 0
                     END AS renal
-                FROM sofa_raw
+                FROM uo_rolling
             ),
             score_final AS (
                 -- MAX of per-hour scores over 24 PRECEDING (official pivoted_sofa.sql)
@@ -3250,6 +4055,14 @@ def step12_sepsis_label(con):
                     sofa_resp + sofa_coag + sofa_liver + sofa_cv + sofa_cns + sofa_renal AS sofa_total
                 FROM score_final
             ),
+            icu_start AS (
+                -- Use ICUSTAYS.intime (official ICU admission timestamp) as the
+                -- suspicion filter threshold. This avoids using intime_hr (ceiling
+                -- of first HR recording) which can predate the official intime in
+                -- edge cases, causing t_suspicion to appear before ICU admission.
+                SELECT icustay_id, intime AS icu_start_time
+                FROM ICUSTAYS
+            ),
             sepsis_event_rows AS (
                 SELECT
                     st.*,
@@ -3260,8 +4073,13 @@ def step12_sepsis_label(con):
                 FROM sofa_totals st
                 JOIN suspinfect_all si
                   ON st.icustay_id = si.icustay_id
+                JOIN icu_start us
+                  ON si.icustay_id = us.icustay_id
                 WHERE st.charttime_floor >= si.si_starttime
                   AND st.charttime_floor <= si.si_endtime
+                  -- only consider suspicion events where culture time is on or
+                  -- after official ICU admission (excludes pre-ICU suspicions)
+                  AND si.t_suspicion >= us.icu_start_time
             ),
             sofa_windowed AS (
                 SELECT
@@ -3309,34 +4127,49 @@ def step12_sepsis_label(con):
                 ) sw
                 GROUP BY icustay_id, charttime_floor
             ),
-            t_sofa_per_stay AS (
+            -- Pair t_suspicion and t_sofa from the SAME suspicion event, then pick
+            -- the earliest valid t_sepsis across all events (Challenge definition).
+            t_sepsis_per_event AS (
                 SELECT
-                    icustay_id,
-                    MIN(t_sofa) AS t_sofa
-                FROM t_sofa_per_event
-                GROUP BY icustay_id
+                    sa.icustay_id,
+                    sa.suspicion_id,
+                    sa.t_suspicion,
+                    sa.si_starttime,
+                    sa.si_endtime,
+                    te.t_sofa,
+                    LEAST(sa.t_suspicion, te.t_sofa) AS t_sepsis
+                FROM suspinfect_all sa
+                INNER JOIN t_sofa_per_event te
+                    ON sa.icustay_id   = te.icustay_id
+                   AND sa.suspicion_id = te.suspicion_id
+            ),
+            t_sepsis_per_stay AS (
+                SELECT icustay_id, t_suspicion, si_starttime, si_endtime, t_sofa, t_sepsis
+                FROM (
+                    SELECT *,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY icustay_id ORDER BY t_sepsis
+                           ) AS rn
+                    FROM t_sepsis_per_event
+                )
+                WHERE rn = 1
             ),
             with_sepsis AS (
                 SELECT
                     st.*,
-                    sf.t_suspicion,
-                    sf.si_starttime,
-                    sf.si_endtime,
+                    ts.t_suspicion,
+                    ts.si_starttime,
+                    ts.si_endtime,
                     sws.sofa_24h_max,
                     sws.sofa_delta_24h,
                     ts.t_sofa,
-                    CASE
-                        WHEN ts.t_sofa IS NOT NULL THEN LEAST(sf.t_suspicion, ts.t_sofa)
-                        ELSE NULL
-                    END AS t_sepsis
+                    ts.t_sepsis
                 FROM sofa_totals st
-                LEFT JOIN suspinfect_first sf
-                  ON st.icustay_id = sf.icustay_id
+                LEFT JOIN t_sepsis_per_stay ts
+                  ON st.icustay_id = ts.icustay_id
                 LEFT JOIN sofa_window_summary sws
                   ON st.icustay_id = sws.icustay_id
                  AND st.charttime_floor = sws.charttime_floor
-                LEFT JOIN t_sofa_per_stay ts
-                  ON st.icustay_id = ts.icustay_id
             )
             SELECT
                 icustay_id,
@@ -3483,8 +4316,7 @@ def step_severity_scores_firstday(con):
                     MIN(sysbp) AS sysbp_min,
                     MAX(sysbp) AS sysbp_max,
                     MIN(gcs_total) AS gcs_min,
-                    SUM(COALESCE(urineoutput, 0.0)) AS urineoutput_firstday,
-                    MAX(CASE WHEN COALESCE(vent_invasive_flag, 0) = 1 THEN 1 ELSE 0 END) AS mechvent
+                    SUM(COALESCE(urineoutput, 0.0)) AS urineoutput_firstday
                 FROM firstday
                 GROUP BY icustay_id
             ),
@@ -3532,83 +4364,6 @@ def step_severity_scores_firstday(con):
                         WHEN COALESCE(a.wbc_min, a.wbc_max, a.bands_max) IS NULL THEN NULL
                         ELSE 0
                     END AS sirs_wbc_score,
-                    CASE
-                        WHEN a.preiculos_hours IS NULL THEN NULL
-                        WHEN a.preiculos_hours * 60.0 < 10.2 THEN 5
-                        WHEN a.preiculos_hours * 60.0 < 297.0 THEN 3
-                        WHEN a.preiculos_hours * 60.0 < 1440.0 THEN 0
-                        WHEN a.preiculos_hours * 60.0 < 18708.0 THEN 2
-                        ELSE 1
-                    END AS oasis_preiculos_score,
-                    CASE
-                        WHEN a.age IS NULL THEN NULL
-                        WHEN a.age < 24 THEN 0
-                        WHEN a.age <= 53 THEN 3
-                        WHEN a.age <= 77 THEN 6
-                        WHEN a.age <= 89 THEN 9
-                        WHEN a.age >= 90 THEN 7
-                        ELSE 0
-                    END AS oasis_age_score,
-                    CASE
-                        WHEN a.gcs_min IS NULL THEN NULL
-                        WHEN a.gcs_min <= 7 THEN 10
-                        WHEN a.gcs_min < 14 THEN 4
-                        WHEN a.gcs_min = 14 THEN 3
-                        ELSE 0
-                    END AS oasis_gcs_score,
-                    CASE
-                        WHEN a.heartrate_max IS NULL THEN NULL
-                        WHEN a.heartrate_max > 125 THEN 6
-                        WHEN a.heartrate_min < 33 THEN 4
-                        WHEN a.heartrate_max BETWEEN 107 AND 125 THEN 3
-                        WHEN a.heartrate_max BETWEEN 89 AND 106 THEN 1
-                        ELSE 0
-                    END AS oasis_heartrate_score,
-                    CASE
-                        WHEN a.meanbp_min IS NULL THEN NULL
-                        WHEN a.meanbp_min < 20.65 THEN 4
-                        WHEN a.meanbp_min < 51 THEN 3
-                        WHEN a.meanbp_max > 143.44 THEN 3
-                        WHEN a.meanbp_min >= 51 AND a.meanbp_min < 61.33 THEN 2
-                        ELSE 0
-                    END AS oasis_meanbp_score,
-                    CASE
-                        WHEN a.resprate_min IS NULL THEN NULL
-                        WHEN a.resprate_min < 6 THEN 10
-                        WHEN a.resprate_max > 44 THEN 9
-                        WHEN a.resprate_max > 30 THEN 6
-                        WHEN a.resprate_max > 22 THEN 1
-                        WHEN a.resprate_min < 13 THEN 1
-                        ELSE 0
-                    END AS oasis_resprate_score,
-                    CASE
-                        WHEN a.tempc_max IS NULL THEN NULL
-                        WHEN a.tempc_max > 39.88 THEN 6
-                        WHEN a.tempc_min BETWEEN 33.22 AND 35.93 THEN 4
-                        WHEN a.tempc_max BETWEEN 33.22 AND 35.93 THEN 4
-                        WHEN a.tempc_min < 33.22 THEN 3
-                        WHEN a.tempc_min > 35.93 AND a.tempc_min <= 36.39 THEN 2
-                        WHEN a.tempc_max >= 36.89 AND a.tempc_max <= 39.88 THEN 2
-                        ELSE 0
-                    END AS oasis_temp_score,
-                    CASE
-                        WHEN a.urineoutput_firstday IS NULL THEN NULL
-                        WHEN a.urineoutput_firstday < 671.09 THEN 10
-                        WHEN a.urineoutput_firstday > 6896.80 THEN 8
-                        WHEN a.urineoutput_firstday BETWEEN 671.09 AND 1426.99 THEN 5
-                        WHEN a.urineoutput_firstday BETWEEN 1427.00 AND 2544.14 THEN 1
-                        ELSE 0
-                    END AS oasis_urineoutput_score,
-                    CASE
-                        WHEN a.mechvent IS NULL THEN NULL
-                        WHEN a.mechvent = 1 THEN 9
-                        ELSE 0
-                    END AS oasis_mechvent_score,
-                    CASE
-                        WHEN a.admission_type = 'ELECTIVE' AND a.surgical = 1 THEN 0
-                        WHEN a.admission_type IS NULL OR a.surgical IS NULL THEN NULL
-                        ELSE 6
-                    END AS oasis_electivesurgery_score,
                     CASE
                         WHEN a.age IS NULL THEN NULL
                         WHEN a.age < 40 THEN 0
@@ -3746,38 +4501,6 @@ def step_severity_scores_firstday(con):
                 sirs_heartrate_score,
                 sirs_resp_score,
                 sirs_wbc_score,
-                COALESCE(oasis_age_score, 0)
-              + COALESCE(oasis_preiculos_score, 0)
-              + COALESCE(oasis_gcs_score, 0)
-              + COALESCE(oasis_heartrate_score, 0)
-              + COALESCE(oasis_meanbp_score, 0)
-              + COALESCE(oasis_resprate_score, 0)
-              + COALESCE(oasis_temp_score, 0)
-              + COALESCE(oasis_urineoutput_score, 0)
-              + COALESCE(oasis_mechvent_score, 0)
-              + COALESCE(oasis_electivesurgery_score, 0) AS oasis,
-                1 / (1 + exp(-(-6.1746 + 0.1275 * (
-                    COALESCE(oasis_age_score, 0)
-                  + COALESCE(oasis_preiculos_score, 0)
-                  + COALESCE(oasis_gcs_score, 0)
-                  + COALESCE(oasis_heartrate_score, 0)
-                  + COALESCE(oasis_meanbp_score, 0)
-                  + COALESCE(oasis_resprate_score, 0)
-                  + COALESCE(oasis_temp_score, 0)
-                  + COALESCE(oasis_urineoutput_score, 0)
-                  + COALESCE(oasis_mechvent_score, 0)
-                  + COALESCE(oasis_electivesurgery_score, 0)
-                )))) AS oasis_prob,
-                oasis_age_score,
-                oasis_preiculos_score,
-                oasis_gcs_score,
-                oasis_heartrate_score,
-                oasis_meanbp_score,
-                oasis_resprate_score,
-                oasis_temp_score,
-                oasis_urineoutput_score,
-                oasis_mechvent_score,
-                oasis_electivesurgery_score,
                 COALESCE(sapsii_age_score, 0)
               + COALESCE(sapsii_hr_score, 0)
               + COALESCE(sapsii_sysbp_score, 0)
@@ -3853,6 +4576,189 @@ def step_severity_scores_firstday(con):
 
 
 # ---------------------------------------------------------------------------
+# Step 12c: hourly OASIS with 24h rolling window (Source: pivot/pivoted_oasis.sql)
+# ---------------------------------------------------------------------------
+def step12c_oasis(con):
+    name = "12c_oasis"
+    if exists(name):
+        log.info("step12c cached"); return
+    t0 = time.time()
+    log.info("step12c hourly OASIS (24h rolling window)...")
+
+    con.execute(f"CREATE OR REPLACE VIEW joined AS SELECT * FROM read_parquet('{inter('11_joined')}')")
+
+    con.execute(f"""
+        COPY (
+            -- Source: pivot/pivoted_oasis.sql
+            -- Structure: scorecomp (per-hour values) → scorecalc (per-hour scores, UO uses SUM OVER W24)
+            --            → score_final (MAX(per-hour score) OVER W24 for dynamic components)
+            WITH surgical_flag AS (
+                SELECT icustay_id,
+                    MAX(CASE WHEN LOWER(COALESCE(curr_service, '')) LIKE '%surg%'
+                             OR curr_service = 'ORTHO' THEN 1 ELSE 0 END) AS surgical
+                FROM joined
+                GROUP BY icustay_id
+            ),
+            scorecomp AS (
+                SELECT
+                    j.icustay_id,
+                    j.hr,
+                    j.hospadmtime   AS preiculos_hours,
+                    j.age,
+                    j.admission_type,
+                    sf.surgical,
+                    j.gcs_total,
+                    j.heartrate,
+                    j.meanbp,
+                    j.resprate,
+                    j.tempc,
+                    CASE WHEN COALESCE(j.vent_invasive_flag, 0) = 1 THEN 1 ELSE 0 END AS mechvent,
+                    COALESCE(j.urineoutput, 0) AS uo_hr
+                FROM joined j
+                LEFT JOIN surgical_flag sf ON j.icustay_id = sf.icustay_id
+            ),
+            scorecalc AS (
+                -- per-hour component scores; UO score based on 24h rolling sum (per official scorecalc)
+                SELECT
+                    icustay_id, hr,
+                    CASE
+                        WHEN preiculos_hours IS NULL THEN NULL
+                        WHEN preiculos_hours * 60.0 < 10.2    THEN 5
+                        WHEN preiculos_hours * 60.0 < 297.0   THEN 3
+                        WHEN preiculos_hours * 60.0 < 1440.0  THEN 0
+                        WHEN preiculos_hours * 60.0 < 18708.0 THEN 1
+                        ELSE 2
+                    END AS oasis_preiculos_score,
+                    CASE
+                        WHEN age IS NULL THEN NULL
+                        WHEN age < 24  THEN 0
+                        WHEN age <= 53 THEN 3
+                        WHEN age <= 77 THEN 6
+                        WHEN age <= 89 THEN 9
+                        WHEN age >= 90 THEN 7
+                        ELSE 0
+                    END AS oasis_age_score,
+                    CASE
+                        WHEN admission_type = 'ELECTIVE' AND surgical = 1 THEN 0
+                        WHEN admission_type IS NULL OR surgical IS NULL   THEN NULL
+                        ELSE 6
+                    END AS oasis_electivesurgery_score,
+                    CASE
+                        WHEN gcs_total IS NULL THEN NULL
+                        WHEN gcs_total <= 7  THEN 10
+                        WHEN gcs_total < 14  THEN 4
+                        WHEN gcs_total = 14  THEN 3
+                        ELSE 0
+                    END AS gcs_score_hr,
+                    CASE
+                        WHEN heartrate IS NULL THEN NULL
+                        WHEN heartrate > 125               THEN 6
+                        WHEN heartrate < 33                THEN 4
+                        WHEN heartrate BETWEEN 107 AND 125 THEN 3
+                        WHEN heartrate BETWEEN 89  AND 106 THEN 1
+                        ELSE 0
+                    END AS heartrate_score_hr,
+                    CASE
+                        WHEN meanbp IS NULL THEN NULL
+                        WHEN meanbp < 20.65                    THEN 4
+                        WHEN meanbp < 51                       THEN 3
+                        WHEN meanbp > 143.44                   THEN 3
+                        WHEN meanbp >= 51 AND meanbp < 61.33   THEN 2
+                        ELSE 0
+                    END AS meanbp_score_hr,
+                    CASE
+                        WHEN resprate IS NULL THEN NULL
+                        WHEN resprate < 6   THEN 10
+                        WHEN resprate > 44  THEN 9
+                        WHEN resprate > 30  THEN 6
+                        WHEN resprate > 22  THEN 1
+                        WHEN resprate < 13  THEN 1
+                        ELSE 0
+                    END AS resprate_score_hr,
+                    CASE
+                        WHEN tempc IS NULL THEN NULL
+                        WHEN tempc > 39.88                        THEN 6
+                        WHEN tempc BETWEEN 33.22 AND 35.93        THEN 4
+                        WHEN tempc < 33.22                         THEN 3
+                        WHEN tempc > 35.93 AND tempc <= 36.39     THEN 2
+                        WHEN tempc >= 36.89 AND tempc <= 39.88    THEN 2
+                        ELSE 0
+                    END AS temp_score_hr,
+                    CASE WHEN mechvent = 1 THEN 9 ELSE 0 END AS mechvent_score_hr,
+                    CASE
+                        WHEN SUM(uo_hr) OVER W24 < 671.09                    THEN 10
+                        WHEN SUM(uo_hr) OVER W24 > 6896.80                   THEN 8
+                        WHEN SUM(uo_hr) OVER W24 BETWEEN 671.09 AND 1426.99  THEN 5
+                        WHEN SUM(uo_hr) OVER W24 BETWEEN 1427.00 AND 2544.14 THEN 1
+                        ELSE 0
+                    END AS uo_score_hr
+                FROM scorecomp
+                WINDOW W24 AS (
+                    PARTITION BY icustay_id ORDER BY hr
+                    ROWS BETWEEN 23 PRECEDING AND CURRENT ROW
+                )
+            ),
+            score_final AS (
+                -- worst score over last 24h for each dynamic component (per official score_final)
+                SELECT
+                    icustay_id, hr,
+                    oasis_preiculos_score,
+                    oasis_electivesurgery_score,
+                    COALESCE(MAX(oasis_age_score)      OVER W24, 0) AS oasis_age_score,
+                    COALESCE(MAX(gcs_score_hr)         OVER W24, 0) AS oasis_gcs_score,
+                    COALESCE(MAX(heartrate_score_hr)   OVER W24, 0) AS oasis_heartrate_score,
+                    COALESCE(MAX(meanbp_score_hr)      OVER W24, 0) AS oasis_meanbp_score,
+                    COALESCE(MAX(resprate_score_hr)    OVER W24, 0) AS oasis_resprate_score,
+                    COALESCE(MAX(temp_score_hr)        OVER W24, 0) AS oasis_temp_score,
+                    COALESCE(MAX(mechvent_score_hr)    OVER W24, 0) AS oasis_mechvent_score,
+                    COALESCE(MAX(uo_score_hr)          OVER W24, 0) AS oasis_urineoutput_score
+                FROM scorecalc
+                WINDOW W24 AS (
+                    PARTITION BY icustay_id ORDER BY hr
+                    ROWS BETWEEN 23 PRECEDING AND CURRENT ROW
+                )
+            )
+            SELECT
+                icustay_id, hr,
+                COALESCE(oasis_age_score, 0)
+              + COALESCE(oasis_preiculos_score, 0)
+              + oasis_gcs_score
+              + oasis_heartrate_score
+              + oasis_meanbp_score
+              + oasis_resprate_score
+              + oasis_temp_score
+              + oasis_urineoutput_score
+              + oasis_mechvent_score
+              + COALESCE(oasis_electivesurgery_score, 0) AS oasis,
+                1 / (1 + EXP(-(-6.1746 + 0.1275 * (
+                    COALESCE(oasis_age_score, 0)
+                  + COALESCE(oasis_preiculos_score, 0)
+                  + oasis_gcs_score
+                  + oasis_heartrate_score
+                  + oasis_meanbp_score
+                  + oasis_resprate_score
+                  + oasis_temp_score
+                  + oasis_urineoutput_score
+                  + oasis_mechvent_score
+                  + COALESCE(oasis_electivesurgery_score, 0)
+                )))) AS oasis_prob,
+                oasis_age_score,
+                oasis_preiculos_score,
+                oasis_gcs_score,
+                oasis_heartrate_score,
+                oasis_meanbp_score,
+                oasis_resprate_score,
+                oasis_temp_score,
+                oasis_urineoutput_score,
+                oasis_mechvent_score,
+                oasis_electivesurgery_score
+            FROM score_final
+        ) TO '{inter(name)}' (FORMAT PARQUET)
+    """)
+    log.info("step12c done %.1fs", time.time() - t0)
+
+
+# ---------------------------------------------------------------------------
 # Step 13: final wide table
 # ---------------------------------------------------------------------------
 def step13_final(con):
@@ -3867,9 +4773,10 @@ def step13_final(con):
     t0 = time.time()
     log.info("step13 building final wide table...")
 
-    con.execute(f"CREATE OR REPLACE VIEW joined     AS SELECT * FROM read_parquet('{inter('11_joined')}')")
-    con.execute(f"CREATE OR REPLACE VIEW sepsis_lbl AS SELECT * FROM read_parquet('{inter('12_sepsislabel')}')")
-    con.execute(f"CREATE OR REPLACE VIEW sev_first  AS SELECT * FROM read_parquet('{inter('severity_scores_firstday')}')")
+    con.execute(f"CREATE OR REPLACE VIEW joined       AS SELECT * FROM read_parquet('{inter('11_joined')}')")
+    con.execute(f"CREATE OR REPLACE VIEW sepsis_lbl   AS SELECT * FROM read_parquet('{inter('12_sepsislabel')}')")
+    con.execute(f"CREATE OR REPLACE VIEW sev_first    AS SELECT * FROM read_parquet('{inter('severity_scores_firstday')}')")
+    con.execute(f"CREATE OR REPLACE VIEW oasis_hourly AS SELECT * FROM read_parquet('{inter('12c_oasis')}')")
 
     out_path = OUT_PATH.replace("\\", "/")
     con.execute(f"""
@@ -3941,9 +4848,15 @@ def step13_final(con):
                 j.psychoses,
                 j.depression,
                 j.elixhauser_vanwalraven,
+                j.elixhauser_SID29,
+                j.elixhauser_SID30,
                 j.curr_service,
-                j.height_cm,
-                j.weight_kg,
+                j.height_first,
+                j.height_min,
+                j.height_max,
+                j.weight_first,
+                j.weight_min,
+                j.weight_max,
 
                 -- vitals
                 j.heartrate,
@@ -4148,18 +5061,19 @@ def step13_final(con):
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sirs_heartrate_score     END AS sirs_heartrate_score,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sirs_resp_score          END AS sirs_resp_score,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sirs_wbc_score           END AS sirs_wbc_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis                    END AS oasis,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_prob               END AS oasis_prob,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_age_score          END AS oasis_age_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_preiculos_score    END AS oasis_preiculos_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_gcs_score          END AS oasis_gcs_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_heartrate_score    END AS oasis_heartrate_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_meanbp_score       END AS oasis_meanbp_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_resprate_score     END AS oasis_resprate_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_temp_score         END AS oasis_temp_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_urineoutput_score  END AS oasis_urineoutput_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_mechvent_score     END AS oasis_mechvent_score,
-                CASE WHEN j.hr < 0 THEN NULL ELSE sf.oasis_electivesurgery_score END AS oasis_electivesurgery_score,
+                -- hourly OASIS (24h rolling window per pivoted_oasis.sql, nulled for pre-ICU hours)
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis                    END AS oasis,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_prob               END AS oasis_prob,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_age_score          END AS oasis_age_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_preiculos_score    END AS oasis_preiculos_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_gcs_score          END AS oasis_gcs_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_heartrate_score    END AS oasis_heartrate_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_meanbp_score       END AS oasis_meanbp_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_resprate_score     END AS oasis_resprate_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_temp_score         END AS oasis_temp_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_urineoutput_score  END AS oasis_urineoutput_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_mechvent_score     END AS oasis_mechvent_score,
+                CASE WHEN j.hr < 0 THEN NULL ELSE oh.oasis_electivesurgery_score END AS oasis_electivesurgery_score,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sapsii                   END AS sapsii,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sapsii_prob              END AS sapsii_prob,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sapsii_age_score         END AS sapsii_age_score,
@@ -4178,8 +5092,10 @@ def step13_final(con):
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sapsii_comorbidity_score END AS sapsii_comorbidity_score,
                 CASE WHEN j.hr < 0 THEN NULL ELSE sf.sapsii_admissiontype_score END AS sapsii_admissiontype_score,
 
-                -- CRRT + prescriptions
-                j.crrt_flag,
+                -- dialysis + prescriptions
+                j.dialysis_present,
+                j.dialysis_active,
+                j.dialysis_type,
                 j.antibiotic_flag,
                 j.steroid_flag,
 
@@ -4214,6 +5130,8 @@ def step13_final(con):
             FROM joined j
             LEFT JOIN sev_first sf
               ON j.icustay_id = sf.icustay_id
+            LEFT JOIN oasis_hourly oh
+              ON j.icustay_id = oh.icustay_id AND j.hr = oh.hr
             LEFT JOIN sepsis_lbl s
               ON j.icustay_id = s.icustay_id AND j.hr = s.hr
             ORDER BY j.icustay_id, j.hr
@@ -4242,6 +5160,7 @@ def main():
     _invalidate_stale_caches()
 
     step01_cohort(con)
+    step_icustay_times(con)
     step02_time_axis(con)
     step03_06_10_chartevents(con)   # single 33GB scan: vitals, GCS, vent, hw, fio2_chart, crrt_cv
     step04_labs(con)
@@ -4258,6 +5177,7 @@ def main():
     step11_join(con)
     step12_sepsis_label(con)
     step_severity_scores_firstday(con)
+    step12c_oasis(con)
     step13_final(con)
 
     result = con.execute(
