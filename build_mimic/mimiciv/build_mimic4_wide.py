@@ -6,13 +6,14 @@ References:
   - MIT-LCP/mimic-code mimic-iv/concepts/
   - MIMIC-IV v3.1 official documentation (physionet.org/content/mimiciv/3.1)
 
-Output: D:/ESILV_S2/Intern/build_mimic/mimiciv/output/mimic4_wide.parquet
+Output: <repo>/build_mimic/mimiciv/output/mimic4_wide.parquet
 """
 
 import os
 import time
 import duckdb
 import logging
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,10 +24,11 @@ log = logging.getLogger(__name__)
 
 HOSP_DIR  = r"D:\ESILV_S2\mimic\raw\physionet.org\files\mimiciv\3.1\hosp"
 ICU_DIR   = r"D:\ESILV_S2\mimic\raw\physionet.org\files\mimiciv\3.1\icu"
-INTER_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciv\intermediate\mimiciv"
-DB_PATH   = r"D:\ESILV_S2\Intern\build_mimic\mimiciv\output\mimic4_build.duckdb"
-OUT_PATH  = r"D:\ESILV_S2\Intern\build_mimic\mimiciv\output\mimic4_wide.parquet"
-DUCKDB_TEMP_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciv\output\duckdb_tmp"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INTER_DIR = str(REPO_ROOT / "build_mimic" / "mimiciv" / "intermediate" / "mimiciv")
+DB_PATH   = str(REPO_ROOT / "build_mimic" / "mimiciv" / "output" / "mimic4_build.duckdb")
+OUT_PATH  = str(REPO_ROOT / "build_mimic" / "mimiciv" / "output" / "mimic4_wide.parquet")
+DUCKDB_TEMP_DIR = str(REPO_ROOT / "build_mimic" / "mimiciv" / "output" / "duckdb_tmp")
 
 ANTIBIOTIC_DRUG_FILTER = """
 (

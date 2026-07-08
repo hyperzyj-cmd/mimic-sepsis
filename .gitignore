@@ -2,6 +2,8 @@
 *.parquet
 *.csv
 *.duckdb
+!build_mimic/mimiciii/output/mimic3_build.duckdb
+!build_mimic/mimiciv/output/mimic4_build.duckdb
 
 # Intermediate pipeline cache
 build_mimic/mimiciii/intermediate/

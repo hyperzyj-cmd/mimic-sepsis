@@ -24,6 +24,7 @@ import argparse
 import logging
 import os
 import time
+from pathlib import Path
 
 import duckdb
 
@@ -35,9 +36,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 RAW_DIR = r"D:\ESILV_S2\mimic\raw\physionet.org\files\mimiciii\1.4\mimiciii csv"
-INTER_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\intermediate\mimiciii"
-DB_PATH = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\output\mimic3_build.duckdb"
-OUT_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\output"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INTER_DIR = str(REPO_ROOT / "build_mimic" / "mimiciii" / "intermediate" / "mimiciii")
+DB_PATH = str(REPO_ROOT / "build_mimic" / "mimiciii" / "output" / "mimic3_build.duckdb")
+OUT_DIR = str(REPO_ROOT / "build_mimic" / "mimiciii" / "output")
 WIDE_IN_PATH = os.path.join(OUT_DIR, "mimic3_wide.parquet").replace("\\", "/")
 REFRESH_TAG = "20260619"
 

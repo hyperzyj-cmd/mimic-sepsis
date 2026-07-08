@@ -2,7 +2,7 @@
 Build MIMIC-III wide table: rows = ICUSTAY_ID x HOUR, columns = clinical variables.
 SepsisLabel follows PhysioNet 2019 Challenge / Sepsis-3 definition.
 
-Output: D:/ESILV_S2/Intern/build_mimic/mimiciii/output/mimic3_wide.parquet
+Output: <repo>/build_mimic/mimiciii/output/mimic3_wide.parquet
 """
 
 import os
@@ -11,6 +11,7 @@ import time
 import shutil
 import duckdb
 import logging
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,10 +21,11 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 RAW_DIR = r"D:\ESILV_S2\mimic\raw\physionet.org\files\mimiciii\1.4\mimiciii csv"
-INTER_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\intermediate\mimiciii"
-DB_PATH = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\output\mimic3_build.duckdb"
-OUT_PATH = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\output\mimic3_wide.parquet"
-BACKUP_DIR = r"D:\ESILV_S2\Intern\build_mimic\mimiciii\output\backups"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INTER_DIR = str(REPO_ROOT / "build_mimic" / "mimiciii" / "intermediate" / "mimiciii")
+DB_PATH = str(REPO_ROOT / "build_mimic" / "mimiciii" / "output" / "mimic3_build.duckdb")
+OUT_PATH = str(REPO_ROOT / "build_mimic" / "mimiciii" / "output" / "mimic3_wide.parquet")
+BACKUP_DIR = str(REPO_ROOT / "build_mimic" / "mimiciii" / "output" / "backups")
 
 os.makedirs(INTER_DIR, exist_ok=True)
 os.makedirs(BACKUP_DIR, exist_ok=True)
