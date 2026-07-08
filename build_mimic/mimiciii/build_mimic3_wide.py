@@ -144,7 +144,7 @@ def step_icustay_times(con):
     con.execute(f"""
         COPY (
             WITH h AS (
-                -- lag/lead 拿相邻住院的出/入院时间
+                -- Use lag/lead to fetch discharge/admission times of adjacent hospital stays
                 SELECT
                     subject_id, hadm_id, admittime, dischtime,
                     LAG(dischtime)  OVER (PARTITION BY subject_id ORDER BY admittime) AS dischtime_lag,
@@ -152,7 +152,7 @@ def step_icustay_times(con):
                 FROM ADMISSIONS
             ),
             adm AS (
-                -- fuzzy 边界：相邻住院间隔 < 24h 时取中间点，否则 ±12h
+                -- Fuzzy boundaries: use the midpoint when adjacent stays are < 24h apart; otherwise use +/-12h
                 SELECT
                     h.subject_id,
                     h.hadm_id,
@@ -175,7 +175,7 @@ def step_icustay_times(con):
                 FROM h
             ),
             t1 AS (
-                -- 在 fuzzy 边界内找首/末次心率
+                -- Find the first/last heart-rate timestamps within the fuzzy boundary
                 SELECT
                     ce.icustay_id,
                     MIN(ce.charttime) AS intime_hr,
@@ -220,9 +220,9 @@ def step02_time_axis(con):
                     it.subject_id,
                     it.hadm_id,
                     it.icustay_id,
-                    -- 官方：ceiling intime_hr 到整点（+59min 再 truncate）
+                    -- Official logic: ceiling intime_hr to the next whole hour (+59 min, then truncate)
                     date_trunc('hour', it.intime_hr + INTERVAL '59' MINUTE) AS endtime,
-                    -- 官方：小时数从 -24 到 CEIL((outtime_hr - intime_hr) 小时)
+                    -- Official logic: hour index runs from -24 to CEIL((outtime_hr - intime_hr) in hours)
                     CAST(CEIL(
                         date_diff('minute', it.intime_hr, it.outtime_hr) / 60.0
                     ) AS INTEGER) AS max_hr
@@ -906,8 +906,8 @@ def step03_06_10_chartevents(con):
                     FROM birth_wt
                     WHERE wt_kg IS NOT NULL
                 ),
-                -- 官方 echo_data.sql：从 NOTEEVENTS 解析心超记录中的体重
-                -- 仅用于无任何 CHARTEVENTS 体重记录的患者（官方注释：约补全 2500 人）
+                -- Official echo_data.sql logic: parse body weight from echocardiography notes in NOTEEVENTS
+                -- Used only for patients with no CHARTEVENTS weight records at all (official note: fills ~2500 patients)
                 echo_raw AS (
                     SELECT
                         ne.hadm_id,
@@ -941,7 +941,7 @@ def step03_06_10_chartevents(con):
                     JOIN ICUSTAYS ie ON er.hadm_id = ie.hadm_id
                     WHERE er.weight_lb IS NOT NULL
                       AND er.weight_lb > 0
-                      -- 官方：只用于无 CHARTEVENTS 体重记录的患者
+                      -- Official logic: only use this for patients without CHARTEVENTS weight records
                       AND ie.icustay_id NOT IN (
                           SELECT DISTINCT icustay_id FROM wt_stg
                       )
@@ -965,7 +965,7 @@ def step03_06_10_chartevents(con):
                     WHERE weight BETWEEN 20 AND 300
                 ),
                 wt_stg2 AS (
-                    -- 官方：第一条 admit weight 的 starttime 设为 intime - 2h
+                    -- Official logic: set the first admit-weight starttime to intime - 2h
                     SELECT
                         s.icustay_id,
                         c.intime,
@@ -980,7 +980,7 @@ def step03_06_10_chartevents(con):
                     JOIN ICUSTAYS c ON s.icustay_id = c.icustay_id
                 ),
                 wt_stg3 AS (
-                    -- 官方：endtime = 下一条记录的 starttime，最后一条用 MAX(outtime,starttime)+2h
+                    -- Official logic: endtime = next records starttime; for the last record use MAX(outtime, starttime) + 2h
                     SELECT
                         icustay_id,
                         intime,
@@ -1006,7 +1006,7 @@ def step03_06_10_chartevents(con):
                     FROM wt_stg3
                 ),
                 wt_fix AS (
-                    -- 官方：若 intime < 第一条 weight 的 starttime，回填该时段
+                    -- Official logic: if intime < first weight starttime, backfill that initial interval
                     SELECT
                         c.icustay_id,
                         c.intime - INTERVAL '2' HOUR AS starttime,
@@ -1030,7 +1030,7 @@ def step03_06_10_chartevents(con):
                     UNION ALL
                     SELECT icustay_id, starttime, endtime, weight FROM wt_fix
                 ),
-                -- 官方 heightweight.sql：从 weight_durations 取 first/min/max
+                -- Official heightweight.sql logic: derive first/min/max from weight_durations
                 wt_agg AS (
                     SELECT
                         icustay_id,
@@ -1071,13 +1071,13 @@ def step03_06_10_chartevents(con):
                     icustay_id,
                     date_trunc('hour', charttime) AS charttime_floor,
                     AVG(CASE
-                        -- 223835: MV Inspired O2 Fraction (官方 pivoted_fio2.sql)
+                        -- 223835: MV Inspired O2 Fraction (official pivoted_fio2.sql)
                         WHEN itemid = 223835 AND valuenum > 0   AND valuenum <= 1   THEN valuenum * 100
                         WHEN itemid = 223835 AND valuenum > 1   AND valuenum < 21   THEN NULL
                         WHEN itemid = 223835 AND valuenum >= 21 AND valuenum <= 100  THEN valuenum
-                        -- 190: CV FiO2 set (小数格式)
+                        -- 190: CareVue FiO2 set (decimal format)
                         WHEN itemid = 190    AND valuenum > 0.20 AND valuenum < 1   THEN valuenum * 100
-                        -- 3420, 3422: CV FiO2，值已是百分比，直接用
+                        -- 3420, 3422: CareVue FiO2 already stored as percentages, so use directly
                         WHEN itemid IN (3420, 3422) AND valuenum > 0 AND valuenum < 100 THEN valuenum
                         ELSE NULL
                     END) AS fio2_chartevents
@@ -1781,7 +1781,7 @@ def step05_bg(con):
         50827,  # ventilation rate
         50828,  # ventilator
         50813,  # lactate (used by LR arterial specimen classifier in pivoted_bg_art.sql)
-        51545,  # (官方 pivoted_bg.sql 包含，用于 specimen filter)
+        51545,  # included in official pivoted_bg.sql and used for specimen filtering
     ]
     ids_str = ",".join(str(i) for i in bg_ids)
 
@@ -1850,7 +1850,7 @@ def step05_bg(con):
                     )
             ),
             bg_valid_draws AS (
-                -- 官方 pivoted_bg.sql: 过滤 specimen 记录数 >= 2 的重复血气（HAVING ... < 2）
+                -- Official pivoted_bg.sql logic: filter duplicate specimen records by keeping draws with specimen count < 2
                 SELECT icustay_id, charttime
                 FROM assigned
                 WHERE rn = 1
@@ -3596,7 +3596,7 @@ def step11_join(con):
                 -- hospital service (time-varying)
                 svc.curr_service,
 
-                -- anthropometrics (官方 heightweight.sql: first/min/max)
+                -- anthropometrics (official heightweight.sql: first/min/max)
                 hw.height_first,
                 hw.height_min,
                 hw.height_max,
